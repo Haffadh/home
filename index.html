@@ -1,0 +1,136 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Smart Home Hub</title>
+    <style>
+        body {
+          font-family: Arial, sans-serif;
+          padding: 20px;
+          max-width: 700px;
+          margin: auto;
+          background: white;
+          color: black;
+        }
+      
+        h1, h2 {
+          margin-top: 30px;
+          color: black;
+        }
+      
+        input, button {
+          padding: 10px;
+          margin: 5px 0;
+          width: 100%;
+          background: white;
+          color: black;
+          border: 1px solid #ccc;
+          border-radius: 8px;
+        }
+      
+        button {
+          cursor: pointer;
+          background: #000;
+          color: #fff;
+          border: none;
+        }
+      
+        .card {
+          border: 1px solid #ddd;
+          padding: 12px;
+          margin-top: 10px;
+          background: #f7f7f7;
+          color: black;
+          border-radius: 10px;
+        }
+      </style>
+  </head>
+
+  <body>
+    <h1>Smart Home Hub ✅</h1>
+
+    <h2>Create User</h2>
+    <input id="userName" placeholder="Name (example: Abood)" />
+    <input id="userRole" placeholder="Role (example: staff)" />
+    <button onclick="createUser()">Create User</button>
+
+<div id="output" style="margin-top:15px; font-size:16px;"></div>
+
+    <h2>Create Task (Weekly)</h2>
+    <input id="taskTitle" placeholder="Task Title (example: Change bedsheets)" />
+    <input id="taskUserId" placeholder="Assigned To (User ID)" />
+    <input id="taskDay" placeholder="Day of week (0=Sun ... 6=Sat)" />
+    <button onclick="createTask()">Create Task</button>
+
+    <h2>Create Urgent Task</h2>
+    <input id="urgentTitle" placeholder="Urgent Task Title (example: Refill water bottles)" />
+    <input id="urgentUserId" placeholder="Assigned To (User ID)" />
+    <button onclick="createUrgentTask()">Create Urgent Task</button>
+
+    <h2>Load Today’s Tasks</h2>
+    <input id="todayUserId" placeholder="User ID" />
+    <button onclick="loadToday()">Load Today</button>
+
+    <div id="output"></div>
+
+    <script>
+      const API = "http://localhost:3000";
+
+      function show(data) {
+        document.getElementById("output").innerHTML =
+          "<pre class='card'>" + JSON.stringify(data, null, 2) + "</pre>";
+      }
+
+      async function createUser() {
+        const name = document.getElementById("userName").value;
+        const role = document.getElementById("userRole").value;
+
+        const res = await fetch(`${API}/users`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, role }),
+        });
+
+        const data = await res.json();
+document.getElementById("output").innerHTML = `<div class="card">✅ User created: <b>${data.name}</b> (${data.role})</div>`;
+      }
+
+      async function createTask() {
+        const title = document.getElementById("taskTitle").value;
+        const assigned_to = Number(document.getElementById("taskUserId").value);
+        const day_of_week = Number(document.getElementById("taskDay").value);
+
+        const res = await fetch(`${API}/tasks`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title, assigned_to, day_of_week }),
+        });
+
+        show(await res.json());
+      }
+
+      async function createUrgentTask() {
+        const title = document.getElementById("urgentTitle").value;
+        const assigned_to = Number(document.getElementById("urgentUserId").value);
+
+        const res = await fetch(`${API}/urgent_tasks`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title, assigned_to }),
+        });
+
+        show(await res.json());
+      }
+
+      async function loadToday() {
+        const userId = document.getElementById("todayUserId").value;
+
+        const res = await fetch(`${API}/today/${userId}`);
+        show(await res.json());
+      }
+  console.log("loaded");
+</script>
+<script>
+  console.log("loaded");
+</script>
+</body>
