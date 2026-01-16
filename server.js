@@ -75,6 +75,10 @@ fastify.post('/tasks', async (request) => {
   
     return rows
   })
+  fastify.get('/tasks', async () => {
+    const { rows } = await db.query('SELECT * FROM tasks ORDER BY id DESC')
+    return rows
+  })
   // ---- URGENT TASKS ----
 
 // Create urgent task
@@ -171,7 +175,7 @@ fastify.get('/', async () => {
   return { status: 'Smart Home Hub backend running' }
 })
 
-fastify.listen({ port: 3000 }, (err) => {
+fastify.listen({ port: 3001 }, (err) => {
   if (err) {
     fastify.log.error(err)
     process.exit(1)
