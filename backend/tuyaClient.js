@@ -11,10 +11,10 @@ function requireTuyaEnv() {
     const accessId = mustEnv("TUYA_ACCESS_ID");
     const accessSecret = mustEnv("TUYA_ACCESS_SECRET");
     const endpoint = mustEnv("TUYA_ENDPOINT").replace(/\/+$/, "");
-    const projectCode = mustEnv("TUYA_PROJECT_CODE");
+    const projectCode = process.env.TUYA_PROJECT_CODE || "";
     return { accessId, accessSecret, endpoint, projectCode };
   } catch {
-    throw new Error("Tuya not configured. Add TUYA_* vars to backend .env");
+    throw new Error("Tuya not configured. Add TUYA_ACCESS_ID, TUYA_ACCESS_SECRET, TUYA_ENDPOINT to backend .env");
   }
 }
 
