@@ -143,4 +143,5 @@ node_modules/
 .env
 *.zip
 
-backend/.env.example
+backend/.env
+frontend/.env.local
