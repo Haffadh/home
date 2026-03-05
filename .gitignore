@@ -142,3 +142,5 @@ node_modules/
 .npm-cache/
 .env
 *.zip
+
+backend/.env.example
