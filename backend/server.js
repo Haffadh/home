@@ -2,14 +2,17 @@ import "dotenv/config";
 import Fastify from "fastify";
 import pg from "pg";
 import cors from "@fastify/cors";
+import fastifyWebsocket from "@fastify/websocket";
 import path from "path";
 import { fileURLToPath } from "url";
 import fastifyStatic from "@fastify/static";
-import { getDevices, getDeviceStatus, setDeviceSwitch, turnOffIfOn, listDevices } from "./tuyaClient.js";
+import { getDevices, getDeviceStatus, getDeviceState, getDevicesCached, setDeviceSwitch, turnOffIfOn, listDevices } from "./tuyaClient.js";
 import { generateHowToAnswer } from "./openaiClient.js";
 import * as dailyTasksDb from "./lib/dailyTasksDb.js";
+import { getActor, logActivity, broadcast } from "./lib/activityLog.js";
 import authRoutes from "./routes/auth.js";
-import { authenticate, requireRole } from "./lib/authMiddleware.js";
+import { requireAuth, requireRole } from "./middleware/auth.js";
+import ROLES from "./constants/roles.js";
 
 // ---- Startup validation: required ENV (exit if missing) ----
 const requiredTuyaEnv = ["TUYA_ACCESS_ID", "TUYA_ACCESS_SECRET", "TUYA_ENDPOINT", "TUYA_DEVICE_IDS"];
@@ -20,8 +23,8 @@ if (missing.length > 0) {
 }
 console.log("ENV loaded");
 console.log("Tuya client initialized ✅");
-
 // ---- Helpers ----
+
 function safeErrorMessage(e) {
   if (e == null) return "Server error";
   const msg = e instanceof Error ? e.message : String(e);
@@ -42,6 +45,15 @@ await fastify.register(cors, {
   origin: ["http://localhost:3000", "http://127.0.0.1:3000"],
   methods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
 });
+await fastify.register(fastifyWebsocket, {
+  options: {
+    verifyClient: (info, next) => {
+      const origin = info.origin || info.req?.headers?.origin;
+      const ok = !origin || origin === "http://localhost:3000" || origin === "http://127.0.0.1:3000";
+      next(ok);
+    },
+  },
+});
 
 const db = new pg.Pool({
   host: process.env.DB_HOST || "localhost",
@@ -59,8 +71,25 @@ try {
   process.exit(1);
 }
 
-// Register auth routes (public: /auth/register, /auth/login, /auth/refresh, /auth/logout)
-await fastify.register(authRoutes, { db });
+// Activity log table
+try {
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS activity_log (
+      id SERIAL PRIMARY KEY,
+      ts TIMESTAMP DEFAULT now(),
+      actor_role TEXT,
+      actor_name TEXT,
+      action TEXT NOT NULL,
+      entity_type TEXT NOT NULL,
+      entity_id TEXT,
+      payload_json JSONB
+    );
+    CREATE INDEX IF NOT EXISTS idx_activity_log_ts ON activity_log(ts DESC);
+  `);
+} catch (e) { console.warn("activity_log init:", e.message); }
+
+// Register auth routes (public: /auth/register, /auth/login, /auth/refresh, /auth/logout; GET /auth/me requires auth)
+await fastify.register(authRoutes, { db, requireAuth });
 
 // Daily reset
 let lastCleanupDay = new Date().toDateString();
@@ -128,19 +157,36 @@ fastify.get("/env-status", async () => ({
   tuyaEndpoint: process.env.TUYA_ENDPOINT || "",
 }));
 
+// WebSocket: real-time events (no auth for simplicity; origin verified in verifyClient)
+fastify.get("/ws", { websocket: true }, (socket, req) => {
+  socket.on("message", () => {});
+  socket.on("close", () => {});
+});
+
 // =============================================
 // PROTECTED ROUTES
 // =============================================
 
+fastify.get("/activity", { preHandler: [requireAuth] }, async (request, reply) => {
+  try {
+    const limit = Math.min(Number(request.query?.limit) || 50, 100);
+    const { rows } = await db.query(
+      "SELECT id, ts, actor_role, actor_name, action, entity_type, entity_id, payload_json FROM activity_log ORDER BY ts DESC LIMIT $1",
+      [limit]
+    );
+    return reply.send(rows);
+  } catch (e) { return sendError(reply, 500, safeErrorMessage(e)); }
+});
+
 // ---- Users ----
-fastify.get("/users", { preHandler: [authenticate] }, async (request, reply) => {
+fastify.get("/users", { preHandler: [requireAuth] }, async (request, reply) => {
   try {
     const { rows } = await db.query("SELECT id, name, role, created_at FROM users ORDER BY id");
     return reply.send(rows.length ? rows : [{ id: 1, name: "Admin", role: "admin", created_at: new Date().toISOString() }]);
   } catch (e) { return sendError(reply, 500, safeErrorMessage(e)); }
 });
 
-fastify.post("/users", { preHandler: [authenticate, requireRole("admin")] }, async (request) => {
+fastify.post("/users", { preHandler: [requireAuth, requireRole(ROLES.ADMIN)] }, async (request) => {
   const { name, role } = request.body;
   const { rows } = await db.query("INSERT INTO users (name, role) VALUES ($1, $2) RETURNING *", [name, role]);
   return rows[0];
@@ -212,7 +258,7 @@ function rescheduleMissedTasks(store) {
   }
 }
 
-fastify.get("/api/tasks", { preHandler: [authenticate] }, async (request, reply) => {
+fastify.get("/api/tasks", { preHandler: [requireAuth] }, async (request, reply) => {
   rescheduleMissedTasks(taskStore);
   const sorted = taskStore.map(toNormalizedTask).filter(Boolean).sort((a, b) => {
     if (a.status === "completed" && b.status !== "completed") return 1;
@@ -223,7 +269,7 @@ fastify.get("/api/tasks", { preHandler: [authenticate] }, async (request, reply)
   return reply.send({ ok: true, tasks: sorted });
 });
 
-fastify.post("/api/tasks", { preHandler: [authenticate] }, async (request, reply) => {
+fastify.post("/api/tasks", { preHandler: [requireAuth] }, async (request, reply) => {
   const body = request.body || {};
   const title = typeof body.title === "string" ? body.title.trim() : "";
   if (!title) return sendError(reply, 400, "title required");
@@ -248,10 +294,13 @@ fastify.post("/api/tasks", { preHandler: [authenticate] }, async (request, reply
   }
   const task = { id: nextId(), title, date: dateStr, startTime, endTime, durationMinutes, status: "pending", category, gatheringId, isAutoGenerated };
   taskStore.push(task);
+  const actor = getActor(request);
+  await logActivity(db, { ...actor, action: "created", entity_type: "task", entity_id: task.id, payload_json: { title } });
+  broadcast(fastify, "tasks_updated", {});
   return reply.code(201).send({ ok: true, task: toNormalizedTask(task) });
 });
 
-fastify.patch("/api/tasks/:id", { preHandler: [authenticate] }, async (request, reply) => {
+fastify.patch("/api/tasks/:id", { preHandler: [requireAuth] }, async (request, reply) => {
   const id = request.params?.id;
   if (!id) return sendError(reply, 400, "id required");
   const task = taskStore.find((t) => t.id === id);
@@ -267,24 +316,34 @@ fastify.patch("/api/tasks/:id", { preHandler: [authenticate] }, async (request, 
     if (bounds) { task.startTime = bounds.start.toISOString(); task.endTime = new Date(bounds.start.getTime() + (task.durationMinutes || 60) * 60 * 1000).toISOString(); }
   }
   if (body.status === "pending" || body.status === "completed") task.status = body.status;
+  const actor = getActor(request);
+  await logActivity(db, { ...actor, action: "updated", entity_type: "task", entity_id: id, payload_json: {} });
+  broadcast(fastify, "tasks_updated", {});
   return reply.send({ ok: true, task: toNormalizedTask(task) });
 });
 
-fastify.patch("/api/tasks/:id/complete", { preHandler: [authenticate] }, async (request, reply) => {
+fastify.patch("/api/tasks/:id/complete", { preHandler: [requireAuth] }, async (request, reply) => {
   const task = taskStore.find((t) => t.id === request.params?.id);
   if (!task) return sendError(reply, 404, "task not found");
   task.status = "completed";
+  const actor = getActor(request);
+  await logActivity(db, { ...actor, action: "toggled", entity_type: "task", entity_id: task.id, payload_json: { status: "completed" } });
+  broadcast(fastify, "tasks_updated", {});
   return reply.send({ ok: true, task: toNormalizedTask(task) });
 });
 
-fastify.delete("/api/tasks/:id", { preHandler: [authenticate] }, async (request, reply) => {
+fastify.delete("/api/tasks/:id", { preHandler: [requireAuth] }, async (request, reply) => {
   const idx = taskStore.findIndex((t) => t.id === request.params?.id);
   if (idx === -1) return sendError(reply, 404, "task not found");
+  const id = request.params?.id;
   taskStore.splice(idx, 1);
+  const actor = getActor(request);
+  await logActivity(db, { ...actor, action: "deleted", entity_type: "task", entity_id: id, payload_json: {} });
+  broadcast(fastify, "tasks_updated", {});
   return reply.send({ ok: true });
 });
 
-fastify.patch("/api/tasks/reorder", { preHandler: [authenticate] }, async (request, reply) => {
+fastify.patch("/api/tasks/reorder", { preHandler: [requireAuth] }, async (request, reply) => {
   const items = Array.isArray(request.body?.tasks) ? request.body.tasks : Array.isArray(request.body) ? request.body : [];
   if (items.length === 0) return sendError(reply, 400, "tasks array required");
   for (const item of items) {
@@ -293,6 +352,9 @@ fastify.patch("/api/tasks/reorder", { preHandler: [authenticate] }, async (reque
     if (item.startTime) task.startTime = item.startTime;
     if (item.endTime) task.endTime = item.endTime;
   }
+  const actor = getActor(request);
+  await logActivity(db, { ...actor, action: "reordered", entity_type: "task", entity_id: null, payload_json: { count: items.length } });
+  broadcast(fastify, "tasks_updated", {});
   return reply.send({ ok: true });
 });
 
@@ -377,7 +439,7 @@ function generateGatheringTasks(payload) {
   return { gatheringId: gid, created };
 }
 
-fastify.post("/api/gathering/generate", { preHandler: [authenticate] }, async (request, reply) => {
+fastify.post("/api/gathering/generate", { preHandler: [requireAuth] }, async (request, reply) => {
   try {
     const body = request.body || {};
     const gatheringType = typeof body.gatheringType === "string" ? body.gatheringType : "";
@@ -386,6 +448,9 @@ fastify.post("/api/gathering/generate", { preHandler: [authenticate] }, async (r
     const time = typeof body.time === "string" ? body.time.trim().slice(0, 5) : "18:00";
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return sendError(reply, 400, "date required (YYYY-MM-DD)");
     const result = generateGatheringTasks({ gatheringType, guestCount: parseInt(body.guestCount || 0) || 0, date, time });
+    const actor = getActor(request);
+    await logActivity(db, { ...actor, action: "created", entity_type: "task", entity_id: null, payload_json: { gatheringType, count: result.created?.length ?? 0 } });
+    broadcast(fastify, "tasks_updated", {});
     return reply.send({ ok: true, ...result, tasks: result.created });
   } catch (e) { return sendError(reply, 500, safeErrorMessage(e)); }
 });
@@ -396,20 +461,23 @@ async function ensureGroceriesTable() {
 }
 try { await ensureGroceriesTable(); } catch (e) { console.warn("DB init warning:", e.message || e); }
 
-fastify.get("/groceries", { preHandler: [authenticate] }, async (request, reply) => {
+fastify.get("/groceries", { preHandler: [requireAuth] }, async (request, reply) => {
   const { rows } = await db.query("SELECT * FROM groceries ORDER BY id DESC");
   return reply.send(rows);
 });
 
-fastify.post("/groceries", { preHandler: [authenticate] }, async (request, reply) => {
+fastify.post("/groceries", { preHandler: [requireAuth] }, async (request, reply) => {
   const body = request.body || {};
   const title = (body.name || body.title || "").trim();
   if (!title) return sendError(reply, 400, "Invalid name");
   const { rows } = await db.query("INSERT INTO groceries (title, requested_by) VALUES ($1, $2) RETURNING *", [title, body.requestedBy === "abood" ? "abood" : "family"]);
+  const actor = getActor(request);
+  await logActivity(db, { ...actor, action: "created", entity_type: "grocery", entity_id: String(rows[0]?.id), payload_json: { title } });
+  broadcast(fastify, "groceries_updated", {});
   return reply.send(rows[0]);
 });
 
-fastify.patch("/groceries/:id", { preHandler: [authenticate] }, async (request, reply) => {
+fastify.patch("/groceries/:id", { preHandler: [requireAuth] }, async (request, reply) => {
   const { id } = request.params;
   const body = request.body || {};
   const fields = [], values = [];
@@ -421,17 +489,24 @@ fastify.patch("/groceries/:id", { preHandler: [authenticate] }, async (request, 
   values.push(id);
   const { rows } = await db.query(`UPDATE groceries SET ${fields.join(", ")} WHERE id = $${i} RETURNING *`, values);
   if (!rows[0]) return sendError(reply, 404, "Not found");
+  const actor = getActor(request);
+  await logActivity(db, { ...actor, action: "updated", entity_type: "grocery", entity_id: id, payload_json: {} });
+  broadcast(fastify, "groceries_updated", {});
   return reply.send(rows[0]);
 });
 
-fastify.delete("/groceries/:id", { preHandler: [authenticate] }, async (request, reply) => {
-  const result = await db.query("DELETE FROM groceries WHERE id = $1 RETURNING id", [request.params.id]);
+fastify.delete("/groceries/:id", { preHandler: [requireAuth] }, async (request, reply) => {
+  const id = request.params.id;
+  const result = await db.query("DELETE FROM groceries WHERE id = $1 RETURNING id", [id]);
   if (!result.rows.length) return sendError(reply, 404, "Not found");
+  const actor = getActor(request);
+  await logActivity(db, { ...actor, action: "deleted", entity_type: "grocery", entity_id: id, payload_json: {} });
+  broadcast(fastify, "groceries_updated", {});
   return reply.send({ ok: true });
 });
 
 // ---- Scenes ----
-fastify.post("/scenes/:sceneId", { preHandler: [authenticate] }, async (request, reply) => {
+fastify.post("/scenes/:sceneId", { preHandler: [requireAuth] }, async (request, reply) => {
   const { sceneId } = request.params;
   const scenes = {
     shower: { sceneName: "Shower Mode", emoji: "🚿", message: "Towel heaters ON for 45 minutes", duration_minutes: 45 },
@@ -442,7 +517,12 @@ fastify.post("/scenes/:sceneId", { preHandler: [authenticate] }, async (request,
   const s = scenes[sceneId];
   if (!s) return sendError(reply, 400, "Unknown scene");
 
-  if (sceneId === "shower") return reply.send({ ok: true, sceneId, ...s, results: { stub: true } });
+  if (sceneId === "shower") {
+    const actor = getActor(request);
+    await logActivity(db, { ...actor, action: "scene_run", entity_type: "device", entity_id: sceneId, payload_json: {} });
+    broadcast(fastify, "devices_updated", {});
+    return reply.send({ ok: true, sceneId, ...s, results: { stub: true } });
+  }
 
   if (sceneId === "gathering") {
     const gt = request.body?.gatheringType;
@@ -451,6 +531,10 @@ fastify.post("/scenes/:sceneId", { preHandler: [authenticate] }, async (request,
     const titles = { bahram: ["Prepare living room for Bahram family", "Set tea, dates & snacks", "Check bathroom supplies"], haffadh: ["Prepare living room for Haffadh family", "Set drinks & snacks", "Check bathroom supplies"], friends: ["Prepare living room for friends", "Set drinks & snacks", "Check bathroom supplies"] };
     const created = [];
     for (const title of titles[gt]) { try { created.push(await createUrgentTask({ title, assigned_to: aboodId })); } catch {} }
+    const actor = getActor(request);
+    await logActivity(db, { ...actor, action: "scene_run", entity_type: "device", entity_id: sceneId, payload_json: { gatheringType: gt } });
+    broadcast(fastify, "urgent_updated", {});
+    broadcast(fastify, "devices_updated", {});
     return reply.send({ ok: true, sceneId, ...s, message: "Gathering Mode prepared", results: { gatheringType: gt, created_urgent_tasks: created } });
   }
 
@@ -465,16 +549,19 @@ fastify.post("/scenes/:sceneId", { preHandler: [authenticate] }, async (request,
   if (counts.already_off) msgParts.push(`${counts.already_off} already off`);
   if (counts.offline) msgParts.push(`${counts.offline} offline`);
   if (counts.error) msgParts.push(`${counts.error} error`);
+  const actor = getActor(request);
+  await logActivity(db, { ...actor, action: "scene_run", entity_type: "device", entity_id: sceneId, payload_json: { counts } });
+  broadcast(fastify, "devices_updated", {});
   return reply.send({ ok: true, sceneId, ...s, message: msgParts.join(" • ") || s.message, results });
 });
 
 // ---- Integrations ----
-fastify.post("/integrations/tuya/trigger", { preHandler: [authenticate] }, async (request, reply) => reply.send({ ok: true, action: request.body?.action || "", payload: request.body?.payload, note: "Tuya integration stub" }));
-fastify.get("/integrations/tuya/status", { preHandler: [authenticate] }, async () => ({ ok: true, connected: false, message: "Tuya integration not configured yet" }));
-fastify.post("/integrations/tuya/device/:deviceId/command", { preHandler: [authenticate] }, async (request, reply) => reply.send({ ok: true, sent: true, deviceId: String(request.params.deviceId || ""), command: request.body?.command || "", value: request.body?.value }));
+fastify.post("/integrations/tuya/trigger", { preHandler: [requireAuth] }, async (request, reply) => reply.send({ ok: true, action: request.body?.action || "", payload: request.body?.payload, note: "Tuya integration stub" }));
+fastify.get("/integrations/tuya/status", { preHandler: [requireAuth] }, async () => ({ ok: true, connected: false, message: "Tuya integration not configured yet" }));
+fastify.post("/integrations/tuya/device/:deviceId/command", { preHandler: [requireAuth] }, async (request, reply) => reply.send({ ok: true, sent: true, deviceId: String(request.params.deviceId || ""), command: request.body?.command || "", value: request.body?.value }));
 
 // ---- AI ----
-fastify.post("/ai/howto", { preHandler: [authenticate] }, async (request, reply) => {
+fastify.post("/ai/howto", { preHandler: [requireAuth] }, async (request, reply) => {
   const body = request.body || {};
   if (typeof body.title !== "string" || !body.title.trim()) return sendError(reply, 400, "Invalid request");
   const result = await generateHowToAnswer({ title: body.title, context: body.context, type: body.type });
@@ -483,7 +570,7 @@ fastify.post("/ai/howto", { preHandler: [authenticate] }, async (request, reply)
   return sendError(reply, 500, `${kind}: ${result?.detail || "OpenAI request failed"}`.slice(0, 200));
 });
 
-fastify.get("/ai/howto", { preHandler: [authenticate] }, async (request, reply) => {
+fastify.get("/ai/howto", { preHandler: [requireAuth] }, async (request, reply) => {
   const { taskTitle, context } = request.query || {};
   if (!taskTitle?.trim()) return sendError(reply, 400, "Invalid request");
   const result = await generateHowToAnswer({ title: taskTitle, context: context || "", type: "task" });
@@ -493,26 +580,79 @@ fastify.get("/ai/howto", { preHandler: [authenticate] }, async (request, reply) 
 });
 
 // ---- Devices ----
-async function deviceSwitchHandler(request, reply) {
-  const deviceId = request.params?.deviceId;
+const DEVICE_POLL_INTERVAL_MS = 15_000;
+let devicePollingInProgress = false;
+
+function getDeviceAllowIds() {
+  const raw = (process.env.TUYA_DEVICE_IDS || "").trim();
+  return raw ? raw.split(",").map((x) => x.trim()).filter(Boolean) : [];
+}
+
+async function deviceToggleHandler(request, reply) {
+  const deviceId = request.params?.deviceId || request.params?.id;
   const on = request.body?.on;
   if (typeof deviceId !== "string" || !deviceId.trim()) return sendError(reply, 400, "deviceId required");
   if (typeof on !== "boolean") return sendError(reply, 400, "on must be boolean");
   const trimmedId = deviceId.trim();
+
+  let stateBefore;
+  try {
+    stateBefore = await getDeviceState(trimmedId);
+  } catch (e) {
+    return sendError(reply, 500, "Failed to fetch device state");
+  }
+  if (!stateBefore.isOnline) {
+    return sendError(reply, 400, "Device offline");
+  }
+
   const tuyaResponse = await setDeviceSwitch(trimmedId, on);
-  if (!tuyaResponse?.ok) return sendError(reply, 500, tuyaResponse?.error || "Tuya command failed");
-  return reply.send({ ok: true, deviceId: trimmedId, on, tuyaResponse });
+  if (!tuyaResponse?.ok) {
+    const msg = tuyaResponse?.error || "Tuya command failed";
+    if (String(msg).toLowerCase().includes("offline")) return sendError(reply, 400, "Device offline");
+    return sendError(reply, 500, msg);
+  }
+
+  let deviceAfter;
+  try {
+    deviceAfter = await getDeviceState(trimmedId);
+  } catch {
+    deviceAfter = { ...stateBefore, powerState: on, lastUpdated: new Date().toISOString() };
+  }
+  const actor = getActor(request);
+  await logActivity(db, { ...actor, action: "toggled", entity_type: "device", entity_id: trimmedId, payload_json: { on } });
+  broadcast(fastify, "devices_updated", {});
+  return reply.send({ ok: true, device: deviceAfter });
 }
 
-fastify.get("/devices", { preHandler: [authenticate] }, async (request, reply) => {
-  const devices = await getDevices();
-  const raw = (process.env.TUYA_DEVICE_IDS || "").trim();
-  const allowIds = raw ? raw.split(",").map(x => x.trim()).filter(Boolean) : [];
-  return reply.send({ ok: true, devices: allowIds.length ? devices.filter(d => allowIds.includes(d.id)) : devices });
+fastify.get("/devices", { preHandler: [requireAuth] }, async (request, reply) => {
+  try {
+    const allowIds = getDeviceAllowIds();
+    const devices = await getDevicesCached(allowIds.length ? allowIds : null);  
+    console.log("DEVICES RAW:", devices);
+    return reply.send({ ok: true, devices });
+  } catch (e) {
+    return sendError(reply, 500, safeErrorMessage(e));
+  }
 });
 
-fastify.post("/devices/:deviceId/toggle", { preHandler: [authenticate] }, deviceSwitchHandler);
-fastify.post("/devices/:deviceId/switch", { preHandler: [authenticate] }, deviceSwitchHandler);
+fastify.post("/devices/:deviceId/toggle", { preHandler: [requireAuth] }, deviceToggleHandler);
+fastify.post("/devices/:deviceId/switch", { preHandler: [requireAuth] }, deviceToggleHandler);
+fastify.patch("/devices/:id/toggle", { preHandler: [requireAuth] }, deviceToggleHandler);
+
+// Background device polling: every 15s refresh state and emit devices_updated (no overlap)
+setInterval(async () => {
+  if (devicePollingInProgress) return;
+  devicePollingInProgress = true;
+  try {
+    const allowIds = getDeviceAllowIds();
+    await getDevicesCached(allowIds.length ? allowIds : null, true);
+    broadcast(fastify, "devices_updated", {});
+  } catch {
+    // ignore
+  } finally {
+    devicePollingInProgress = false;
+  }
+}, DEVICE_POLL_INTERVAL_MS);
 
 // ---- Daily Tasks ----
 const TIME_REGEX = /^([01]?\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/;
@@ -521,7 +661,7 @@ function validTime(s) { return typeof s === "string" && TIME_REGEX.test(s.trim()
 function validDate(s) { return typeof s === "string" && DATE_REGEX.test(s.trim()) && !isNaN(new Date(s + "T12:00:00Z").getTime()); }
 function validRecurrence(s) { return s === "none" || s === "daily" || s === "weekly"; }
 
-fastify.get("/daily-tasks", { preHandler: [authenticate] }, async (request, reply) => {
+fastify.get("/daily-tasks", { preHandler: [requireAuth] }, async (request, reply) => {
   const staffUserId = request.query?.staff_user_id;
   if (!staffUserId || !Number.isInteger(Number(staffUserId))) return sendError(reply, 400, "staff_user_id required (integer)");
   const dateStr = request.query?.date && validDate(request.query.date) ? request.query.date.trim() : new Date().toISOString().slice(0, 10);
@@ -529,7 +669,7 @@ fastify.get("/daily-tasks", { preHandler: [authenticate] }, async (request, repl
   return reply.send({ ok: true, ...result });
 });
 
-fastify.post("/daily-tasks", { preHandler: [authenticate] }, async (request, reply) => {
+fastify.post("/daily-tasks", { preHandler: [requireAuth] }, async (request, reply) => {
   const body = request.body || {};
   const { staff_user_id, window_start, window_end, start_date, end_date } = body;
   const title = (body.title || "").trim();
@@ -548,7 +688,7 @@ fastify.post("/daily-tasks", { preHandler: [authenticate] }, async (request, rep
   return reply.code(201).send({ ok: true, data: row });
 });
 
-fastify.patch("/daily-tasks/:id", { preHandler: [authenticate] }, async (request, reply) => {
+fastify.patch("/daily-tasks/:id", { preHandler: [requireAuth] }, async (request, reply) => {
   const id = request.params?.id;
   if (!id || !Number.isInteger(Number(id))) return sendError(reply, 400, "id required");
   const body = request.body || {};
@@ -568,7 +708,7 @@ fastify.patch("/daily-tasks/:id", { preHandler: [authenticate] }, async (request
   return reply.send({ ok: true, data: row });
 });
 
-fastify.post("/daily-tasks/:id/complete", { preHandler: [authenticate] }, async (request, reply) => {
+fastify.post("/daily-tasks/:id/complete", { preHandler: [requireAuth] }, async (request, reply) => {
   const id = request.params?.id;
   const date = request.body?.date ?? request.query?.date ?? new Date().toISOString().slice(0, 10);
   if (!id || !Number.isInteger(Number(id))) return sendError(reply, 400, "id required");
@@ -578,7 +718,7 @@ fastify.post("/daily-tasks/:id/complete", { preHandler: [authenticate] }, async 
   return reply.send({ ok: true, data: instance });
 });
 
-fastify.post("/daily-tasks/:id/skip", { preHandler: [authenticate] }, async (request, reply) => {
+fastify.post("/daily-tasks/:id/skip", { preHandler: [requireAuth] }, async (request, reply) => {
   const id = request.params?.id;
   const date = request.body?.date ?? request.query?.date ?? new Date().toISOString().slice(0, 10);
   if (!id || !Number.isInteger(Number(id))) return sendError(reply, 400, "id required");
@@ -589,56 +729,66 @@ fastify.post("/daily-tasks/:id/skip", { preHandler: [authenticate] }, async (req
 });
 
 // ---- Legacy task routes ----
-fastify.post("/tasks", { preHandler: [authenticate] }, async (request) => {
+fastify.post("/tasks", { preHandler: [requireAuth] }, async (request) => {
   const { title, assigned_to, day_of_week } = request.body;
   const { rows } = await db.query("INSERT INTO tasks (title, assigned_to, day_of_week) VALUES ($1, $2, $3) RETURNING *", [title, assigned_to, day_of_week]);
   return rows[0];
 });
 
-fastify.get("/tasks/today/:userId", { preHandler: [authenticate] }, async (request) => {
+fastify.get("/tasks/today/:userId", { preHandler: [requireAuth] }, async (request) => {
   const { rows } = await db.query("SELECT * FROM tasks WHERE assigned_to = $1 AND day_of_week = $2", [request.params.userId, new Date().getDay()]);
   return rows;
 });
 
-fastify.get("/tasks/assigned/:userId", { preHandler: [authenticate] }, async (request) => {
+fastify.get("/tasks/assigned/:userId", { preHandler: [requireAuth] }, async (request) => {
   const { rows } = await db.query("SELECT * FROM tasks WHERE assigned_to = $1 ORDER BY id DESC", [request.params.userId]);
   return rows;
 });
 
-fastify.get("/tasks", { preHandler: [authenticate] }, async () => {
+fastify.get("/tasks", { preHandler: [requireAuth] }, async () => {
   const { rows } = await db.query("SELECT * FROM tasks ORDER BY id DESC");
   return rows;
 });
 
-fastify.get("/tasks/today", { preHandler: [authenticate] }, async () => {
+fastify.get("/tasks/today", { preHandler: [requireAuth] }, async () => {
   const { rows } = await db.query("SELECT * FROM tasks WHERE day_of_week = $1 ORDER BY id DESC", [new Date().getDay()]);
   return rows;
 });
 
-fastify.post("/urgent_tasks", { preHandler: [authenticate] }, async (request, reply) => {
+fastify.post("/urgent_tasks", { preHandler: [requireAuth] }, async (request, reply) => {
   const body = request.body || {};
   let assigned_to = body.assigned_to;
   if ((assigned_to == null || assigned_to === "") && body.assigned_to_name?.trim()) assigned_to = await findUserIdByName(body.assigned_to_name.trim());
-  try { return reply.send(await createUrgentTask({ title: body.title, assigned_to })); }
-  catch (e) { return sendError(reply, 400, "Invalid urgent task"); }
+  try {
+    const task = await createUrgentTask({ title: body.title, assigned_to });
+    const actor = getActor(request);
+    await logActivity(db, { ...actor, action: "created", entity_type: "urgent_task", entity_id: String(task?.id), payload_json: { title: body.title } });
+    broadcast(fastify, "urgent_updated", {});
+    return reply.send(task);
+  } catch (e) { return sendError(reply, 400, "Invalid urgent task"); }
 });
 
-fastify.get("/urgent_tasks", { preHandler: [authenticate] }, async () => {
+fastify.get("/urgent_tasks", { preHandler: [requireAuth] }, async () => {
   const { rows } = await db.query("SELECT * FROM urgent_tasks ORDER BY id DESC");
   return rows;
 });
 
-fastify.get("/urgent_tasks/:userId", { preHandler: [authenticate] }, async (request) => {
+fastify.get("/urgent_tasks/:userId", { preHandler: [requireAuth] }, async (request) => {
   const { rows } = await db.query("SELECT * FROM urgent_tasks WHERE assigned_to = $1 ORDER BY id DESC", [request.params.userId]);
   return rows;
 });
 
-fastify.patch("/urgent_tasks/:id/ack", { preHandler: [authenticate] }, async (request) => {
-  const { rows } = await db.query("UPDATE urgent_tasks SET acknowledged = true WHERE id = $1 RETURNING *", [request.params.id]);
-  return rows[0];
+fastify.patch("/urgent_tasks/:id/ack", { preHandler: [requireAuth] }, async (request, reply) => {
+  const id = request.params.id;
+  const { rows } = await db.query("UPDATE urgent_tasks SET acknowledged = true WHERE id = $1 RETURNING *", [id]);
+  if (!rows[0]) return sendError(reply, 404, "Urgent task not found");
+  const actor = getActor(request);
+  await logActivity(db, { ...actor, action: "toggled", entity_type: "urgent_task", entity_id: id, payload_json: { acknowledged: true } });
+  broadcast(fastify, "urgent_updated", {});
+  return reply.send(rows[0]);
 });
 
-fastify.get("/today/:userId", { preHandler: [authenticate] }, async (request) => {
+fastify.get("/today/:userId", { preHandler: [requireAuth] }, async (request) => {
   const { userId } = request.params;
   const today = new Date().getDay();
   const urgent = await db.query("SELECT * FROM urgent_tasks WHERE assigned_to = $1 AND acknowledged = false ORDER BY id DESC", [userId]);
@@ -646,7 +796,7 @@ fastify.get("/today/:userId", { preHandler: [authenticate] }, async (request) =>
   return { urgent: urgent.rows, tasks: normal.rows };
 });
 
-fastify.patch("/urgent_tasks/:id", { preHandler: [authenticate] }, async (request, reply) => {
+fastify.patch("/urgent_tasks/:id", { preHandler: [requireAuth] }, async (request, reply) => {
   const { id } = request.params;
   const body = request.body || {};
   const fields = [], values = [];
@@ -657,16 +807,19 @@ fastify.patch("/urgent_tasks/:id", { preHandler: [authenticate] }, async (reques
   values.push(id);
   const { rows } = await db.query(`UPDATE urgent_tasks SET ${fields.join(", ")} WHERE id = $${i} RETURNING *`, values);
   if (!rows[0]) return sendError(reply, 404, "Urgent task not found");
+  const actor = getActor(request);
+  await logActivity(db, { ...actor, action: "updated", entity_type: "urgent_task", entity_id: id, payload_json: {} });
+  broadcast(fastify, "urgent_updated", {});
   return reply.send(rows[0]);
 });
 
-fastify.patch("/tasks/:taskId/toggle", { preHandler: [authenticate] }, async (request, reply) => {
+fastify.patch("/tasks/:taskId/toggle", { preHandler: [requireAuth] }, async (request, reply) => {
   const result = await db.query("UPDATE tasks SET is_done = NOT is_done WHERE id = $1 RETURNING *", [request.params.taskId]);
   if (!result.rows.length) return sendError(reply, 404, "Task not found");
   return reply.send(result.rows[0]);
 });
 
-fastify.patch("/tasks/:id", { preHandler: [authenticate] }, async (request, reply) => {
+fastify.patch("/tasks/:id", { preHandler: [requireAuth] }, async (request, reply) => {
   const { id } = request.params;
   const body = request.body || {};
   const fields = [], values = [];
@@ -680,15 +833,19 @@ fastify.patch("/tasks/:id", { preHandler: [authenticate] }, async (request, repl
   return reply.send(result.rows[0]);
 });
 
-fastify.delete("/tasks/:id", { preHandler: [authenticate] }, async (request, reply) => {
+fastify.delete("/tasks/:id", { preHandler: [requireAuth] }, async (request, reply) => {
   const result = await db.query("DELETE FROM tasks WHERE id = $1 RETURNING id", [request.params.id]);
   if (!result.rows.length) return sendError(reply, 404, "Task not found");
   return reply.send({ ok: true });
 });
 
-fastify.delete("/urgent_tasks/:id", { preHandler: [authenticate] }, async (request, reply) => {
-  const result = await db.query("DELETE FROM urgent_tasks WHERE id = $1 RETURNING id", [request.params.id]);
+fastify.delete("/urgent_tasks/:id", { preHandler: [requireAuth] }, async (request, reply) => {
+  const id = request.params.id;
+  const result = await db.query("DELETE FROM urgent_tasks WHERE id = $1 RETURNING id", [id]);
   if (!result.rows.length) return sendError(reply, 404, "Urgent task not found");
+  const actor = getActor(request);
+  await logActivity(db, { ...actor, action: "deleted", entity_type: "urgent_task", entity_id: id, payload_json: {} });
+  broadcast(fastify, "urgent_updated", {});
   return reply.send({ ok: true });
 });
 
@@ -712,7 +869,7 @@ async function shutdown(signal) {
 process.on("SIGINT", () => shutdown("SIGINT"));
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 
-const port = Number(process.env.PORT) || 3001;
+const port = Number(process.env.PORT) || 4000;
 fastify.listen({ port }, (err) => {
   if (err) { fastify.log.error(err); process.exit(1); }
   console.log(`Server running on http://localhost:${port}`);

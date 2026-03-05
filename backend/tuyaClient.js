@@ -139,31 +139,37 @@ export async function tuyaRequest(method, path, body) {
 }
 
 export async function getDevices() {
-  // Common Tuya IoT endpoint for listing devices in a project.
-  // If your project uses a different path, adjust here.
-  const result = await tuyaRequest("GET", "/v1.0/devices");
+  const ids = (process.env.TUYA_DEVICE_IDS || "")
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
 
-  const devices = Array.isArray(result?.devices) ? result.devices : Array.isArray(result) ? result : [];
-  return devices.map((d) => ({
-    id: d.id || d.dev_id || d.device_id,
-    name: d.name || d.local_name || d.product_name || "Unnamed",
-    online: typeof d.online === "boolean" ? d.online : Boolean(d.is_online),
-    category: d.category || d.category_code || null,
-    product_id: d.product_id || d.productId || null,
-    product_name: d.product_name || null,
-    icon: d.icon || d.icon_url || d.iconUrl || null,
-    // best-effort on/off from list response (some Tuya responses include `status` here)
-    status: Array.isArray(d.status)
-      ? (() => {
-          const sw = d.status.find(
-            (s) => typeof s?.code === "string" && /^switch/.test(s.code) && typeof s.value === "boolean"
-          );
-          return typeof sw?.value === "boolean" ? sw.value : null;
-        })()
-      : null,
-  }));
+  if (!ids.length) return [];
+
+  const devices = [];
+
+  for (const id of ids) {
+    try {
+      const d = await tuyaRequest("GET", `/v1.0/iot-03/devices/${id}`);
+
+      devices.push({
+        id: d.id || d.device_id,
+        name: d.name || d.local_name || "Unnamed",
+        online:
+          typeof d.online === "boolean"
+            ? d.online
+            : typeof d.is_online === "boolean"
+            ? d.is_online
+            : false,
+        status: Array.isArray(d.status) ? d.status : null,
+      });
+    } catch (e) {
+      console.error("Device fetch failed:", id);
+    }
+  }
+
+  return devices;
 }
-
 // Back-compat (older server routes)
 export const listDevices = getDevices;
 
@@ -188,13 +194,72 @@ function pickSwitchCode(statuses) {
     (x) => typeof x?.code === "string" && /^switch/.test(x.code) && typeof x.value === "boolean"
   );
   if (candidates.length === 0) return null;
-  // Prefer common codes, otherwise first
   return (
     candidates.find((c) => c.code === "switch_1")?.code ||
     candidates.find((c) => c.code === "switch")?.code ||
     candidates.find((c) => c.code === "switch_led")?.code ||
     candidates[0].code
   );
+}
+
+function pickSwitchValue(statuses) {
+  const s = Array.isArray(statuses) ? statuses : [];
+  const candidates = s.filter(
+    (x) => typeof x?.code === "string" && /^switch/.test(x.code) && typeof x.value === "boolean"
+  );
+  if (candidates.length === 0) return null;
+  const preferred = candidates.find((c) => c.code === "switch_1") || candidates.find((c) => c.code === "switch") || candidates[0];
+  return preferred?.value === true;
+}
+
+const DEVICES_CACHE_TTL_MS = 5000;
+let devicesCache = { data: null, ts: 0 };
+
+/**
+ * Single device state: { id, name, isOnline, powerState, lastUpdated }.
+ * powerState is boolean (on/off) or null if unknown.
+ */
+export async function getDeviceState(deviceId) {
+  const st = await getDeviceStatus(deviceId);
+  const now = new Date().toISOString();
+  const powerState = pickSwitchValue(st.status);
+  return {
+    id: deviceId,
+    name: st.name || "Unnamed",
+    isOnline: st.online === true,
+    powerState: powerState === null ? null : powerState,
+    lastUpdated: now,
+  };
+}
+
+/**
+ * All devices with real-time state. Uses allowIds if provided (e.g. TUYA_DEVICE_IDS).
+ * Each device: { id, name, isOnline, powerState, lastUpdated }.
+ */
+export async function getDevicesWithState(allowIds = null) {
+  const list = await getDevices();
+  const ids = Array.isArray(allowIds) && allowIds.length > 0
+    ? list.filter((d) => allowIds.includes(d.id)).map((d) => d.id)
+    : list.map((d) => d.id);
+  if (ids.length === 0) return [];
+
+  const results = await Promise.allSettled(ids.map((id) => getDeviceState(id)));
+  return results.map((r, i) =>
+    r.status === "fulfilled" ? r.value : { id: ids[i], name: "Unnamed", isOnline: false, powerState: null, lastUpdated: new Date().toISOString() }
+  );
+}
+
+/**
+ * Cached devices list. TTL 5s. forceRefresh bypasses cache and updates it.
+ */
+export async function getDevicesCached(allowIds, forceRefresh = false) {
+  const now = Date.now();
+  if (!forceRefresh && devicesCache.data && now - devicesCache.ts < DEVICES_CACHE_TTL_MS) {
+    return devicesCache.data;
+  }
+  const data = await getDevicesWithState(allowIds);
+  devicesCache = { data, ts: now };
+  return data;
 }
 
 export async function setDeviceSwitch(deviceId, on) {
@@ -285,4 +350,3 @@ export async function turnOffIfOn(deviceId) {
     return { ...base, error: String(msg || "Tuya error") };
   }
 }
-

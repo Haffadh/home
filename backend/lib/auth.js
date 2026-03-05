@@ -92,8 +92,9 @@ export function verifyToken(token) {
 // ---- Token generation helpers ----
 
 export function generateAccessToken(user) {
+  const role = user.role ?? "admin";
   return signToken(
-    { sub: user.id, email: user.email, role: user.role, name: user.name },
+    { id: user.id, role },
     ACCESS_TOKEN_EXPIRY
   );
 }

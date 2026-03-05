@@ -7,7 +7,14 @@ import {
   REFRESH_TOKEN_EXPIRY,
 } from "../lib/auth.js";
 
-export default async function authRoutes(fastify, { db }) {
+export default async function authRoutes(fastify, { db, requireAuth }) {
+  // ---- GET /auth/me ----
+  if (requireAuth) {
+    fastify.get("/auth/me", { preHandler: [requireAuth] }, async (request, reply) => {
+      return reply.send({ id: request.user.id, role: request.user.role });
+    });
+  }
+
   // ---- POST /auth/register ----
   fastify.post("/auth/register", async (request, reply) => {
     const body = request.body || {};
