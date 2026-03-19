@@ -25,7 +25,7 @@ export default function UrgentTasksCard({ canEditTasks = true, readOnly = false,
   const [newTitle, setNewTitle] = useState("");
   const [newPriority, setNewPriority] = useState(1);
   const [adding, setAdding] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLUListElement>(null);
   const [fadeTop, setFadeTop] = useState(false);
   const [fadeBottom, setFadeBottom] = useState(true);
   function handleScroll() {
@@ -152,7 +152,7 @@ export default function UrgentTasksCard({ canEditTasks = true, readOnly = false,
           <p className="text-[0.8125rem] text-white/45">No urgent tasks.</p>
         ) : (
           <div className="relative min-h-0 flex-1 overflow-hidden" style={{ maxHeight: all.length > 4 ? "calc(4 * 3.75rem + 3.5 * 0.625rem + 1.5rem)" : undefined }}>
-            <ul ref={scrollRef as React.RefObject<HTMLUListElement>} onScroll={handleScroll} className="space-y-2.5 overflow-y-auto min-h-0 h-full no-scrollbar">
+            <ul ref={scrollRef} onScroll={handleScroll} className="space-y-2.5 overflow-y-auto min-h-0 h-full no-scrollbar">
               {/* Pending tasks */}
               {pending.map((t) => {
                 const prio = t.priority ?? 1;

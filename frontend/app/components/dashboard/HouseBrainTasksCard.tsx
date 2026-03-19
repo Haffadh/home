@@ -296,7 +296,7 @@ export default function HouseBrainTasksCard({
   const [newCategory, setNewCategory] = useState("misc");
   const [newDuration, setNewDuration] = useState(30);
   const [adding, setAdding] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLUListElement>(null);
   const [fadeTop, setFadeTop] = useState(false);
   const [fadeBottom, setFadeBottom] = useState(true);
   function handleScroll() {
@@ -558,7 +558,7 @@ export default function HouseBrainTasksCard({
         ) : (
           <div className="relative min-h-0 flex-1 overflow-hidden" style={{ maxHeight: ordered.length > 4 ? "calc(4 * 3.5rem + 3.5 * 0.625rem + 1.5rem)" : undefined }}>
             <DndContext sensors={sensors} collisionDetection={closestCenter} modifiers={[restrictToVerticalAxis]} onDragEnd={handleDragEnd}>
-              <ul ref={scrollRef as React.RefObject<HTMLUListElement>} onScroll={handleScroll} className="space-y-2.5 overflow-y-auto min-h-0 h-full no-scrollbar">
+              <ul ref={scrollRef} onScroll={handleScroll} className="space-y-2.5 overflow-y-auto min-h-0 h-full no-scrollbar">
                 <SortableContext items={pending.map((t) => t.id)} strategy={verticalListSortingStrategy}>
                   {pending.map((t) => (
                     <SortableTaskRow
