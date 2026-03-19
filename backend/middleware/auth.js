@@ -2,7 +2,8 @@ import { verifyToken } from "../lib/auth.js";
 
 /**
  * Extract token from Authorization: Bearer <token>
- * verify with JWT_SECRET and attach decoded user to request.user
+ * verify with JWT_SECRET and attach decoded user to request.user.
+ * In development, "dev-token" is accepted and maps to request.user = { id: "dev", role: "admin" }.
  */
 async function requireAuth(request, reply) {
   const authHeader = request.headers.authorization;
@@ -14,16 +15,22 @@ async function requireAuth(request, reply) {
     });
   }
 
-  const token = authHeader.slice(7);
-  const payload = verifyToken(token);
+  const token = authHeader.slice(7).trim();
+
+  // Development fallback: never try to decode dev-token (avoids crashes from invalid JWT parsing).
+  if (token === "dev-token") {
+    request.user = { id: "dev", role: "admin" };
+    return;
+  }
+
+  let payload = null;
+  try {
+    payload = verifyToken(token);
+  } catch {
+    payload = null;
+  }
 
   if (!payload) {
-    // allow dev token
-    if (token === "dev-token") {
-      request.user = { id: "dev", role: "admin" };
-      return;
-    }
-
     return reply.code(401).send({
       ok: false,
       error: "Invalid or expired token"

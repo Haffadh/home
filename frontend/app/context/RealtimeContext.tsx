@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
-import { API_BASE } from "@/lib/config";
+import { getBaseUrl } from "../../lib/api";
 
 type RealtimeContextValue = {
   connected: boolean;
@@ -27,13 +27,13 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
 
   const connect = useCallback(() => {
     if (typeof window === "undefined") return;
-  
-    const wsUrl = API_BASE.replace(/^http/, "ws") + "/realtime";
-  
+
+    const wsUrl = getBaseUrl().replace(/^http/, "ws") + "/ws";
+
     try {
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
-  
+
       ws.onopen = () => {
         setConnected(true);
         if (pollRef.current) {
@@ -41,12 +41,26 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
           pollRef.current = null;
         }
       };
-  
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data && typeof data.event === "string") {
+            const { event: ev, ...payload } = data;
+            dispatchRealtime(ev, payload);
+          }
+        } catch {
+          // ignore non-JSON or invalid
+        }
+      };
+
       ws.onclose = () => {
         setConnected(false);
         wsRef.current = null;
+        // Auto-reconnect after 3s
+        if (reconnectRef.current) clearTimeout(reconnectRef.current);
+        reconnectRef.current = setTimeout(() => connect(), 3000);
       };
-  
     } catch (err) {
       console.error("WS connection failed:", err);
     }
@@ -85,14 +99,17 @@ export function useRealtime() {
   return useContext(RealtimeContext);
 }
 
-/** Subscribe to realtime events (e.g. tasks_updated, urgent_updated). Call the callback when event matches. */
+/** Subscribe to realtime events (e.g. tasks_updated, urgent_updated). Uses a ref for the callback so subscription is stable (only event name in deps). */
 export function useRealtimeEvent(event: string, onEvent: () => void) {
+  const onEventRef = useRef(onEvent);
+  onEventRef.current = onEvent;
+
   useEffect(() => {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail;
-      if (detail?.event === event) onEvent();
+      if (detail?.event === event) onEventRef.current();
     };
     window.addEventListener(REALTIME_EVENT, handler);
     return () => window.removeEventListener(REALTIME_EVENT, handler);
-  }, [event, onEvent]);
+  }, [event]);
 }

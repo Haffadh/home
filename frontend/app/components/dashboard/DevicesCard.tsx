@@ -2,61 +2,30 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import GlassCard from "./GlassCard";
-import { getApiBase, getActorHeaders, withActorBody } from "../../../lib/api";
 import { useRealtime, useRealtimeEvent } from "../../context/RealtimeContext";
+import * as devicesService from "../../../lib/services/devices";
+import type { Device } from "../../../lib/services/devices";
 
-import { API_BASE } from "@/lib/config";
-console.log("API_BASE =", API_BASE);
 const DEVICES_FALLBACK_POLL_MS = 20_000;
-
-type Device = {
-  id: string;
-  name: string;
-  isOnline?: boolean;
-  online?: boolean;
-  powerState?: boolean | null;
-  status?: boolean | null;
-  lastUpdated?: string;
-};
-
-function normalizeDevice(d: Record<string, unknown>): Device {
-  return {
-    id: String(d.id ?? ""),
-    name: String(d.name ?? "Unnamed"),
-    isOnline: typeof d.isOnline === "boolean" ? d.isOnline : typeof d.online === "boolean" ? d.online : true,
-    powerState: typeof d.powerState === "boolean" ? d.powerState : typeof d.status === "boolean" ? d.status : null,
-    lastUpdated: typeof d.lastUpdated === "string" ? d.lastUpdated : undefined,
-  };
-}
+const BRIGHTNESS_DEBOUNCE_MS = 400;
 
 function isOn(device: Device): boolean {
-  return device.powerState === true || device.status === true;
+  return device.powerState === true;
 }
 
 export default function DevicesCard() {
   const [devices, setDevices] = useState<Device[]>([]);
   const [loading, setLoading] = useState(true);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const brightnessTimeoutRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const { connected: wsConnected } = useRealtime() ?? { connected: false };
   const fallbackPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const loadDevices = useCallback(async () => {
     setLoading(true);
     try {
-      const token = localStorage.getItem("token");
-
-const res = await fetch(`${API_BASE}/devices`, {
-  cache: "no-store",
-  headers: {
-    Authorization: `Bearer ${token}`,
-  },
-});
-      const data = await res.json().catch(() => null);
-      if (res.ok && Array.isArray(data?.devices)) {
-        setDevices(data.devices.map(normalizeDevice));
-      } else {
-        setDevices([]);
-      }
+      const data = await devicesService.fetchDevices();
+      setDevices(data ?? []);
     } catch {
       setDevices([]);
     } finally {
@@ -70,7 +39,6 @@ const res = await fetch(`${API_BASE}/devices`, {
 
   useRealtimeEvent("devices_updated", loadDevices);
 
-  // When WebSocket is disconnected, poll devices every 20s
   useEffect(() => {
     if (wsConnected) {
       if (fallbackPollRef.current) {
@@ -85,6 +53,8 @@ const res = await fetch(`${API_BASE}/devices`, {
         clearInterval(fallbackPollRef.current);
         fallbackPollRef.current = null;
       }
+      Object.values(brightnessTimeoutRef.current).forEach(clearTimeout);
+      brightnessTimeoutRef.current = {};
     };
   }, [wsConnected, loadDevices]);
 
@@ -93,27 +63,41 @@ const res = await fetch(`${API_BASE}/devices`, {
     const prevDevices = devices;
     setTogglingId(device.id);
     setDevices((prev) =>
-      prev.map((d) => (d.id === device.id ? { ...d, powerState: nextOn, status: nextOn } : d))
+      prev.map((d) => (d.id === device.id ? { ...d, powerState: nextOn } : d))
     );
     try {
-      const res = await fetch(`${API_BASE}/devices/${encodeURIComponent(device.id)}/toggle`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json", ...getActorHeaders() },
-        body: JSON.stringify(withActorBody({ on: nextOn })),
-      });
-      const data = await res.json().catch(() => null);
-      if (res.ok && data?.device) {
-        setDevices((prev) =>
-          prev.map((d) => (d.id === device.id ? normalizeDevice(data.device) : d))
-        );
-      } else {
-        setDevices(prevDevices);
-      }
+      const updated = await devicesService.setDeviceState(device.id, { switch: nextOn });
+      setDevices((prev) =>
+        prev.map((d) => (d.id === device.id ? updated : d))
+      );
     } catch {
       setDevices(prevDevices);
     } finally {
       setTogglingId(null);
     }
+  }
+
+  function handleBrightnessChange(device: Device, value: number) {
+    const pct = Math.max(0, Math.min(100, value));
+    const bright = Math.round((pct / 100) * 255) || 1;
+    setDevices((prev) =>
+      prev.map((d) => (d.id === device.id ? { ...d, brightness: bright } : d))
+    );
+    if (brightnessTimeoutRef.current[device.id]) {
+      clearTimeout(brightnessTimeoutRef.current[device.id]);
+    }
+    brightnessTimeoutRef.current[device.id] = setTimeout(async () => {
+      try {
+        const updated = await devicesService.setDeviceState(device.id, { brightness: bright });
+        setDevices((prev) =>
+          prev.map((d) => (d.id === device.id ? updated : d))
+        );
+      } catch {
+        // revert on error: refetch
+        loadDevices();
+      }
+      delete brightnessTimeoutRef.current[device.id];
+    }, BRIGHTNESS_DEBOUNCE_MS);
   }
 
   return (
@@ -130,52 +114,71 @@ const res = await fetch(`${API_BASE}/devices`, {
           {devices.map((d) => {
             const online = d.isOnline !== false;
             const updating = togglingId === d.id;
+            const isLight = d.type === "light" && d.brightness != null;
+            const brightnessPct = d.brightness != null ? Math.round((d.brightness / 255) * 100) : 50;
             return (
               <li
                 key={d.id}
-                className="flex items-center justify-between gap-3 rounded-2xl border border-white/[0.06] px-3.5 py-2.5 backdrop-blur-xl transition-all duration-300 ease-out hover:-translate-y-0.5"
+                className="flex flex-col gap-2 rounded-2xl border border-white/[0.06] px-3.5 py-2.5 backdrop-blur-xl transition-all duration-300 ease-out hover:-translate-y-0.5"
                 style={{
                   background: "linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%)",
                   boxShadow: "0 2px 12px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.05)",
                 }}
               >
-                <div className="min-w-0 flex items-center gap-2">
-                  {updating ? (
-                    <span className="shrink-0 w-3 h-3 border border-white/50 border-t-transparent rounded-full animate-spin" title="Updating…" aria-hidden />
-                  ) : (
-                    <span
-                      className="shrink-0 w-2 h-2 rounded-full"
-                      title={online ? "Online" : "Offline"}
-                      style={{
-                        background: online ? "rgba(34,197,94,0.95)" : "rgba(239,68,68,0.95)",
-                      }}
-                    />
-                  )}
-                  <div className="min-w-0">
-                    <p className="text-[0.875rem] font-medium text-white/90 truncate tracking-tight">
-                      {d.name}
-                    </p>
-                    <p className="text-[0.6875rem] text-white/45 mt-0.5">
-                      {!online ? "Offline" : typeof d.powerState === "boolean" || typeof d.status === "boolean" ? (isOn(d) ? "On" : "Off") : "—"}
-                    </p>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0 flex items-center gap-2">
+                    {updating ? (
+                      <span className="shrink-0 w-3 h-3 border border-white/50 border-t-transparent rounded-full animate-spin" title="Updating…" aria-hidden />
+                    ) : (
+                      <span
+                        className="shrink-0 w-2 h-2 rounded-full"
+                        title={online ? "Online" : "Offline"}
+                        style={{
+                          background: online ? "rgba(34,197,94,0.95)" : "rgba(239,68,68,0.95)",
+                        }}
+                      />
+                    )}
+                    <div className="min-w-0">
+                      <p className="text-[0.875rem] font-medium text-white/90 truncate tracking-tight">
+                        {d.name}
+                      </p>
+                      <p className="text-[0.6875rem] text-white/45 mt-0.5">
+                        {!online ? "Offline" : typeof d.powerState === "boolean" ? (isOn(d) ? "On" : "Off") : "—"}
+                      </p>
+                    </div>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => handleToggle(d)}
+                    disabled={updating || !online}
+                    className={`
+                      shrink-0 rounded-xl px-3.5 py-2 text-[0.75rem] font-medium
+                      transition-all duration-300 ease-out hover:scale-[1.02] disabled:opacity-50 border
+                      ${
+                        isOn(d)
+                          ? "bg-[rgba(52,211,153,0.15)] text-emerald-300/95 border-emerald-400/25 hover:bg-[rgba(52,211,153,0.2)]"
+                          : "bg-[#1e293b]/60 text-white/80 border-white/10 hover:bg-[#1e293b]/80 hover:text-white/95"
+                      }
+                    `}
+                  >
+                    {updating ? "…" : isOn(d) ? "On" : "Off"}
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => handleToggle(d)}
-                  disabled={updating || !online}
-                  className={`
-                    shrink-0 rounded-xl px-3.5 py-2 text-[0.75rem] font-medium
-                    transition-all duration-300 ease-out hover:scale-[1.02] disabled:opacity-50 border
-                    ${
-                      isOn(d)
-                        ? "bg-[rgba(52,211,153,0.15)] text-emerald-300/95 border-emerald-400/25 hover:bg-[rgba(52,211,153,0.2)]"
-                        : "bg-white/10 text-white/80 border-white/10 hover:bg-white/20 hover:text-white/95"
-                    }
-                  `}
-                >
-                  {updating ? "…" : isOn(d) ? "On" : "Off"}
-                </button>
+                {isLight && online && (
+                  <div className="flex items-center gap-2 pl-5">
+                    <span className="text-[0.6875rem] text-white/45 w-8">Dim</span>
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      value={brightnessPct}
+                      disabled={!isOn(d)}
+                      onChange={(e) => handleBrightnessChange(d, Number(e.target.value))}
+                      className="flex-1 h-1.5 rounded-full appearance-none bg-white/15 accent-emerald-400"
+                    />
+                    <span className="text-[0.6875rem] text-white/45 w-8">Bright</span>
+                  </div>
+                )}
               </li>
             );
           })}

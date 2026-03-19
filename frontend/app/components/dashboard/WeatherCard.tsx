@@ -2,11 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import GlassCard from "./GlassCard";
-
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE ||
-  process.env.NEXT_PUBLIC_API_BASE_URL ||
-  "http://127.0.0.1:3001";
+import { getApiBase } from "../../../lib/api";
 
 type Weather = {
   tempC: number;
@@ -22,14 +18,14 @@ export default function WeatherCard() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/weather`, { cache: "no-store" });
-      const data = await res.json().catch(() => null);
-      if (res.ok && data && typeof data.tempC === "number") {
+      const data = await getApiBase("/api/weather", { cache: "no-store" });
+      if (data && typeof (data as { tempC?: number }).tempC === "number") {
+        const d = data as { tempC: number; condition?: string; icon?: string; location?: string };
         setWeather({
-          tempC: data.tempC,
-          condition: data.condition || "—",
-          icon: data.icon || "sun",
-          location: data.location || "—",
+          tempC: d.tempC,
+          condition: d.condition || "—",
+          icon: d.icon || "sun",
+          location: d.location || "—",
         });
       } else {
         setWeather(null);

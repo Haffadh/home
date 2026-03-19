@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { Role } from "../../lib/roles";
-import { getStoredRole, ROLE_DEFAULT_ROUTE } from "../../lib/roles";
+import type { Role } from "../../../lib/roles";
+import { getStoredRole, ROLE_DEFAULT_ROUTE } from "../../../lib/roles";
 
 type RequireRoleProps = {
   allowedRoles: Role[];
@@ -21,7 +21,7 @@ export default function RequireRole({ allowedRoles, children }: RequireRoleProps
       return;
     }
     if (!allowedRoles.includes(role)) {
-      router.replace(ROLE_DEFAULT_ROUTE[role]);
+      router.replace(ROLE_DEFAULT_ROUTE[role as keyof typeof ROLE_DEFAULT_ROUTE]);
       return;
     }
     setAllowed(true);

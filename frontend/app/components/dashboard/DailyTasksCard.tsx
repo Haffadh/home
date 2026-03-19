@@ -13,7 +13,6 @@ import {
 } from "@dnd-kit/core";
 import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import {
-  arrayMove,
   SortableContext,
   sortableKeyboardCoordinates,
   useSortable,
@@ -21,21 +20,17 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import GlassCard from "./GlassCard";
-import {
-  getMergedTasks,
-  updateLocalTask,
-  removeLocalTask,
-  isLocalTask,
-} from "./GatheringModal";
-import { useRealtimeEvent } from "../../context/RealtimeContext";
+import { getMergedTasks } from "./GatheringModal";
+import { useRealtimeTable } from "../../../lib/useRealtimeTable";
+import { getSupabaseClient } from "../../../lib/supabaseClient";
+import * as tasksService from "../../../lib/services/tasks";
+import { taskRowsToUI } from "../../../lib/adapters/tasks";
+import { applyShiftTasksBackward, applySwapTaskSlots } from "../../../lib/scheduling/applySchedulingToSupabase";
+import { formatTaskTimeRange, formatTimeOnly } from "../../../lib/scheduling/formatTaskTimeRange";
+import type { TaskRow } from "../../../lib/services/tasks";
+import SkipTaskModal, { type SkipOption } from "./SkipTaskModal";
 
 const LONG_PRESS_MS = 600;
-const TODAY_START_HOUR = 9;
-const TODAY_START_MINUTE = 0;
-
-import { getApiBase, getActorHeaders, withActorBody } from "../../lib/api";
-
-const API_BASE = getApiBase();
 
 const taskCardStyle = {
   background: "rgba(255,255,255,0.06)",
@@ -70,14 +65,6 @@ type Task = {
   order: number;
 };
 
-function formatTimeOnly(iso: string): string {
-  return new Date(iso).toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
-}
-
 function formatDateDisplay(dateStr: string): string {
   return new Date(dateStr + "T12:00:00").toLocaleDateString(undefined, {
     weekday: "short",
@@ -110,20 +97,6 @@ function sortTodayTasks(tasks: Task[]): Task[] {
 /** Only sort by order. NO other sorting. Used as single source for render. */
 function tasksByOrder(tasks: Task[]): Task[] {
   return [...tasks].sort((a, b) => a.order - b.order);
-}
-
-/** recomputeSchedule: assign start/end times sequentially from order; uses each task's durationMinutes. */
-function recalculateTimes(incompleteTasks: Task[], dateStr: string): Task[] {
-  const todayStart = new Date(`${dateStr}T${String(TODAY_START_HOUR).padStart(2, "0")}:${String(TODAY_START_MINUTE).padStart(2, "0")}:00`);
-  const now = new Date();
-  let cursor = now > todayStart ? now : todayStart;
-  return incompleteTasks.map((t) => {
-    const dur = t.durationMinutes ?? 60;
-    const startIso = cursor.toISOString();
-    cursor = new Date(cursor.getTime() + dur * 60 * 1000);
-    const endIso = cursor.toISOString();
-    return { ...t, startTime: startIso, endTime: endIso };
-  });
 }
 
 // Sortable task row (incomplete only)
@@ -167,7 +140,6 @@ function SortableTaskRow({
         onClick={(e) => onClick(e)}
         onMouseDown={(e) => !readOnly && onPressStart(e)}
         onMouseUp={onPressEnd}
-        onMouseLeave={onPressEnd}
         onTouchStart={(e) => !readOnly && onPressStart(e)}
         onTouchEnd={onPressEnd}
         onContextMenu={onContextMenu}
@@ -175,9 +147,14 @@ function SortableTaskRow({
         onMouseEnter={(e) => {
           if (task.status !== "completed" && !isHolding) e.currentTarget.style.boxShadow = "0 0 20px rgba(120,180,255,0.2)";
         }}
-        onMouseLeave={(e) => { if (!isHolding) e.currentTarget.style.boxShadow = ""; }}
+        onMouseLeave={(e) => {
+          onPressEnd();
+          if (!isHolding) e.currentTarget.style.boxShadow = "";
+        }}
       >
-        <span className="shrink-0 w-14 text-xs tabular-nums opacity-70">{formatTimeOnly(task.startTime)}</span>
+        <span className="shrink-0 text-xs tabular-nums opacity-70 min-w-[7rem]">
+          {formatTaskTimeRange(task.startTime, task.endTime ?? new Date(new Date(task.startTime).getTime() + (task.durationMinutes ?? 60) * 60000).toISOString(), task.durationMinutes)}
+        </span>
         <span className={`min-w-0 flex-1 truncate text-[0.875rem] text-white/90 ${task.status === "completed" ? "line-through" : ""}`}>{task.title}</span>
         {task.status !== "completed" && !readOnly && canReorder && (
           <span
@@ -238,15 +215,13 @@ function TaskActionModal({
           </div>
           <div className="flex justify-between gap-4">
             <dt className="text-white/50">Time</dt>
-            <dd className="text-white/90">{formatTimeOnly(task.startTime)}</dd>
+            <dd className="text-white/90">
+              {formatTaskTimeRange(task.startTime, task.endTime ?? new Date(new Date(task.startTime).getTime() + (task.durationMinutes ?? 60) * 60000).toISOString(), task.durationMinutes)}
+            </dd>
           </div>
           <div className="flex justify-between gap-4">
             <dt className="text-white/50">Window</dt>
             <dd className="text-white/90">{timeWindowLabel(task.startTime)}</dd>
-          </div>
-          <div className="flex justify-between gap-4">
-            <dt className="text-white/50">Duration</dt>
-            <dd className="text-white/90">{task.durationMinutes ?? 0} min</dd>
           </div>
         </dl>
         <div className="flex flex-wrap gap-2">
@@ -261,7 +236,7 @@ function TaskActionModal({
             <button
               type="button"
               onClick={onEdit}
-              className="rounded-2xl border border-white/15 bg-white/10 px-4 py-2.5 text-[0.8125rem] font-medium text-white/90 hover:bg-white/15 transition-all"
+              className="rounded-2xl border border-white/10 bg-[#1e293b]/60 px-4 py-2.5 text-[0.8125rem] font-medium text-white/90 hover:bg-[#1e293b]/80 transition-all active:scale-[0.97]"
             >
               Edit
             </button>
@@ -269,16 +244,66 @@ function TaskActionModal({
           <button
             type="button"
             onClick={onHowTo}
-            className="rounded-2xl border border-white/15 bg-white/10 px-4 py-2.5 text-[0.8125rem] font-medium text-white/90 hover:bg-white/15 transition-all"
+            className="rounded-2xl border border-white/10 bg-[#1e293b]/60 px-4 py-2.5 text-[0.8125rem] font-medium text-white/90 hover:bg-[#1e293b]/80 transition-all active:scale-[0.97]"
           >
             How to?
           </button>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2.5 text-[0.8125rem] font-medium text-white/70 hover:bg-white/10 transition-all ml-auto"
+            className="rounded-2xl border border-white/10 bg-[#0f172a]/70 px-4 py-2.5 text-[0.8125rem] font-medium text-white/70 hover:bg-[#0f172a]/80 transition-all ml-auto"
           >
             Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Replace-with picker when user chooses "Replace another task" in Skip flow
+function ReplaceTaskPickerModal({
+  skipTask,
+  candidates,
+  onSelect,
+  onBack,
+  onClose,
+}: {
+  skipTask: Task;
+  candidates: Task[];
+  onSelect: (task: Task) => void;
+  onBack: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-[116] flex items-center justify-center p-4" role="dialog" aria-modal="true">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-sm rounded-2xl p-6 bg-slate-800/90 border border-white/10 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-lg font-semibold text-white/95 mb-1">Swap with which task?</h3>
+        <p className="text-[0.6875rem] text-white/50 uppercase tracking-wider mb-4">Skipping: {skipTask.title}</p>
+        <ul className="space-y-2 max-h-48 overflow-y-auto mb-4">
+          {candidates.length === 0 ? (
+            <li className="text-[0.8125rem] text-white/50">No other tasks to swap with.</li>
+          ) : (
+            candidates.map((t) => (
+              <li key={t.id}>
+                <button
+                  type="button"
+                  onClick={() => onSelect(t)}
+                  className="w-full rounded-xl border border-white/10 bg-[#0f172a]/70 py-2.5 px-4 text-left text-[0.875rem] font-medium text-white/90 hover:bg-[#0f172a]/80 transition"
+                >
+                  {formatTimeOnly(t.startTime)} · {t.title}
+                </button>
+              </li>
+            ))
+          )}
+        </ul>
+        <div className="flex gap-2">
+          <button type="button" onClick={onBack} className="rounded-xl border border-white/10 bg-[#0f172a]/70 px-4 py-2.5 text-[0.8125rem] font-medium text-white/70 hover:bg-white/10">
+            Back
+          </button>
+          <button type="button" onClick={onClose} className="rounded-xl border border-white/10 py-2.5 text-[0.8125rem] text-white/60 hover:bg-white/5 px-4">
+            Cancel
           </button>
         </div>
       </div>
@@ -320,7 +345,7 @@ function EditTaskModal({
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full rounded-xl px-3.5 py-2.5 text-[0.875rem] text-white/95 border border-white/[0.12] bg-white/[0.06] focus:outline-none focus:border-white/20"
+              className="w-full rounded-xl px-3.5 py-2.5 text-[0.875rem] text-white/95 border border-white/10 bg-[#0f172a]/50 focus:outline-none focus:border-white/20"
             />
           </div>
           <div>
@@ -329,7 +354,7 @@ function EditTaskModal({
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              className="w-full rounded-xl px-3.5 py-2.5 text-[0.875rem] text-white/95 border border-white/[0.12] bg-white/[0.06] focus:outline-none focus:border-white/20"
+              className="w-full rounded-xl px-3.5 py-2.5 text-[0.875rem] text-white/95 border border-white/10 bg-[#0f172a]/50 focus:outline-none focus:border-white/20"
             />
           </div>
           <div>
@@ -338,7 +363,7 @@ function EditTaskModal({
               type="time"
               value={startTime}
               onChange={(e) => setStartTime(e.target.value)}
-              className="w-full rounded-xl px-3.5 py-2.5 text-[0.875rem] text-white/95 border border-white/[0.12] bg-white/[0.06] focus:outline-none focus:border-white/20"
+              className="w-full rounded-xl px-3.5 py-2.5 text-[0.875rem] text-white/95 border border-white/10 bg-[#0f172a]/50 focus:outline-none focus:border-white/20"
             />
           </div>
           <div>
@@ -348,12 +373,12 @@ function EditTaskModal({
               min={5}
               value={durationMinutes}
               onChange={(e) => setDurationMinutes(parseInt(e.target.value, 10) || 15)}
-              className="w-full rounded-xl px-3.5 py-2.5 text-[0.875rem] text-white/95 border border-white/[0.12] bg-white/[0.06] focus:outline-none focus:border-white/20"
+              className="w-full rounded-xl px-3.5 py-2.5 text-[0.875rem] text-white/95 border border-white/10 bg-[#0f172a]/50 focus:outline-none focus:border-white/20"
             />
           </div>
         </div>
         <div className="flex gap-2">
-          <button type="button" onClick={onClose} className="flex-1 rounded-2xl border border-white/15 bg-white/5 py-2.5 text-[0.8125rem] font-medium text-white/80 hover:bg-white/10">
+          <button type="button" onClick={onClose} className="flex-1 rounded-2xl border border-white/10 bg-[#0f172a]/70 py-2.5 text-[0.8125rem] font-medium text-white/80 hover:bg-[#0f172a]/80 transition active:scale-[0.97]">
             Cancel
           </button>
           <button
@@ -387,7 +412,7 @@ function HowToPlaceholderModal({ taskTitle, onClose }: { taskTitle: string; onCl
         <button
           type="button"
           onClick={onClose}
-          className="rounded-2xl border border-white/15 bg-white/5 px-4 py-2.5 text-[0.8125rem] font-medium text-white/80 hover:bg-white/10"
+          className="rounded-2xl border border-white/10 bg-[#0f172a]/70 px-4 py-2.5 text-[0.8125rem] font-medium text-white/80 hover:bg-[#0f172a]/80 transition active:scale-[0.97]"
         >
           Close
         </button>
@@ -402,6 +427,8 @@ export default function DailyTasksCard({ readOnly = false, canEditTasks = true, 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [skipTaskModal, setSkipTaskModal] = useState<Task | null>(null);
+  const [replacePicker, setReplacePicker] = useState(false);
   const [editTask, setEditTask] = useState<Task | null>(null);
   const [howToTitle, setHowToTitle] = useState<string | null>(null);
   const [isLongPress, setIsLongPress] = useState(false);
@@ -421,26 +448,18 @@ export default function DailyTasksCard({ readOnly = false, canEditTasks = true, 
   const loadTasks = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/tasks`, { cache: "no-store" });
-      const data = await res.json().catch(() => null);
-      const apiList = res.ok && Array.isArray(data?.tasks) ? data.tasks : [];
-      const merged = getMergedTasks(apiList as Task[]);
-      const todayOnly = merged.filter((t: Task) => isToday(t.date));
+      const rows = await tasksService.fetchTasksFromApi();
+      const ui = taskRowsToUI(rows ?? []);
+      const merged = getMergedTasks(ui as Task[]);
+      const todayOnly = merged.filter((t) => isToday(t.date)) as Task[];
       const sorted = sortTodayTasks(todayOnly).slice(0, 6);
       setTasks(sorted.map((t, i) => ({ ...t, order: i })));
     } catch {
-      const merged = getMergedTasks([]);
-      const todayOnly = merged.filter((t: Task) => isToday(t.date));
-      const sorted = sortTodayTasks(todayOnly).slice(0, 6);
-      setTasks(sorted.map((t, i) => ({ ...t, order: i })));
+      setTasks([]);
     } finally {
       setLoading(false);
     }
   }, []);
-
-  useEffect(() => {
-    loadTasks();
-  }, [loadTasks]);
 
   useEffect(() => {
     const onMidnight = () => loadTasks();
@@ -453,7 +472,11 @@ export default function DailyTasksCard({ readOnly = false, canEditTasks = true, 
     };
   }, [loadTasks]);
 
-  useRealtimeEvent("tasks_updated", loadTasks);
+  useEffect(() => {
+    loadTasks();
+  }, [loadTasks]);
+
+  useRealtimeTable("tasks", loadTasks);
 
   useEffect(() => {
     return () => {
@@ -493,7 +516,7 @@ export default function DailyTasksCard({ readOnly = false, canEditTasks = true, 
   }
 
   async function toggleTask(task: Task) {
-    const nextStatus = task.status === "completed" ? "pending" : "completed";
+    const nextStatus: Task["status"] = task.status === "completed" ? "pending" : "completed";
     const prevTasks = tasks;
     setTasks((current) => {
       const next = current.map((t) => (t.id === task.id ? { ...t, status: nextStatus } : t));
@@ -505,19 +528,11 @@ export default function DailyTasksCard({ readOnly = false, canEditTasks = true, 
       return next.map((t) => (t.id === task.id ? { ...t, order: maxOrder + 1 } : t));
     });
     try {
-      if (isLocalTask(task.id)) {
-        updateLocalTask(task.id, { status: nextStatus });
-      } else {
+      if (getSupabaseClient()) {
         if (nextStatus === "completed") {
-          const res = await fetch(`${API_BASE}/api/tasks/${task.id}/complete`, { method: "PATCH", headers: { ...getActorHeaders() } });
-          if (!res.ok) throw new Error("Tick failed");
+          await tasksService.completeTask(task.id);
         } else {
-          const res = await fetch(`${API_BASE}/api/tasks/${task.id}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json", ...getActorHeaders() },
-            body: JSON.stringify(withActorBody({ status: "pending" })),
-          });
-          if (!res.ok) throw new Error("Untick failed");
+          await tasksService.updateTask(task.id, { status: "pending" });
         }
       }
     } catch {
@@ -526,47 +541,103 @@ export default function DailyTasksCard({ readOnly = false, canEditTasks = true, 
     }
   }
 
-  function handleSkip(task: Task) {
-    if (isLocalTask(task.id)) {
-      removeLocalTask(task.id);
-    } else {
-      fetch(`${API_BASE}/api/tasks/${task.id}`, { method: "DELETE", headers: { ...getActorHeaders() } }).catch(() => {});
+  function openSkipModal(task: Task) {
+    setSelectedTask(null);
+    setIsLongPress(false);
+    setSkipTaskModal(task);
+    setReplacePicker(false);
+  }
+
+  function taskToRowLike(t: Task): TaskRow {
+    const end = t.endTime ?? new Date(new Date(t.startTime).getTime() + (t.durationMinutes ?? 60) * 60000).toISOString();
+    return {
+      id: t.id,
+      title: t.title,
+      assigned_by: null,
+      start_time: t.startTime,
+      end_time: end,
+      duration: t.durationMinutes ?? 60,
+      urgent: false,
+      room: null,
+      status: t.status,
+      created_at: new Date().toISOString(),
+    };
+  }
+
+  async function handleSkipChoice(option: SkipOption) {
+    const task = skipTaskModal;
+    if (!task || !getSupabaseClient()) return;
+    if (option === "leave_empty") {
+      try {
+        await tasksService.deleteTask(task.id);
+        await loadTasks();
+      } catch {
+        loadTasks();
+      }
+      setSkipTaskModal(null);
+      return;
     }
-    loadTasks();
+    if (option === "replace") {
+      setReplacePicker(true);
+      return;
+    }
+    if (option === "bring_forward") {
+      try {
+        const today = new Date().toISOString().slice(0, 10);
+        const rows = await tasksService.fetchTasks({ date: today });
+        const pending = rows.filter((r) => r.status !== "completed").sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
+        const idx = pending.findIndex((r) => r.id === task.id);
+        if (idx === -1) {
+          await tasksService.deleteTask(task.id);
+          await loadTasks();
+          setSkipTaskModal(null);
+          return;
+        }
+        const durationMs = (task.durationMinutes ?? 60) * 60 * 1000;
+        await applyShiftTasksBackward(pending, idx + 1, durationMs);
+        await tasksService.deleteTask(task.id);
+        await loadTasks();
+      } catch {
+        loadTasks();
+      }
+      setSkipTaskModal(null);
+    }
+  }
+
+  async function handleReplaceWith(other: Task) {
+    const task = skipTaskModal;
+    if (!task || !getSupabaseClient()) return;
+    try {
+      const rowA = taskToRowLike(task);
+      const rowB = taskToRowLike(other);
+      await applySwapTaskSlots(rowA, rowB);
+      await loadTasks();
+    } catch {
+      loadTasks();
+    }
+    setSkipTaskModal(null);
+    setReplacePicker(false);
   }
 
   async function handleEditSave(
     task: Task,
     payload: { title: string; date: string; startTime: string; durationMinutes: number }
   ) {
+    if (!getSupabaseClient()) return;
     const [h, m] = payload.startTime.split(":").map(Number);
     const startDate = new Date(payload.date);
     startDate.setHours(h, m, 0, 0);
     const startIso = startDate.toISOString();
     const endIso = new Date(startDate.getTime() + payload.durationMinutes * 60 * 1000).toISOString();
-    if (isLocalTask(task.id)) {
-      updateLocalTask(task.id, {
+    try {
+      await tasksService.updateTask(task.id, {
         title: payload.title,
-        date: payload.date,
-        startTime: startIso,
-        endTime: endIso,
-        durationMinutes: payload.durationMinutes,
+        start_time: startIso,
+        end_time: endIso,
+        duration: payload.durationMinutes,
       });
-    } else {
-      try {
-        await fetch(`${API_BASE}/api/tasks/${task.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json", ...getActorHeaders() },
-          body: JSON.stringify(withActorBody({
-            title: payload.title,
-            date: payload.date,
-            startTime: startIso,
-            durationMinutes: payload.durationMinutes,
-          })),
-        });
-      } catch {
-        // ignore
-      }
+    } catch {
+      // ignore
     }
     setEditTask(null);
     setSelectedTask(null);
@@ -583,7 +654,7 @@ export default function DailyTasksCard({ readOnly = false, canEditTasks = true, 
     document.body.style.overflowX = "hidden";
   }
 
-  /** Reorder by active.id/over.id; reassign order sequentially; recompute times; setTasks with new array ref. */
+  /** Reorder = swap time slots of the two tasks (active and over). */
   async function handleDragEnd(event: DragEndEvent) {
     document.body.style.overflowX = "";
     if (!canReorder) return;
@@ -592,49 +663,22 @@ export default function DailyTasksCard({ readOnly = false, canEditTasks = true, 
     const activeId = String(active.id);
     const overId = String(over.id);
     const prev = tasksRef.current;
-
     const incomplete = prev.filter((t) => t.status !== "completed");
-    const oldIndex = incomplete.findIndex((t) => t.id === activeId);
-    const newIndex = incomplete.findIndex((t) => t.id === overId);
-    if (oldIndex === -1 || newIndex === -1) return;
-
-    const reordered = arrayMove([...incomplete], oldIndex, newIndex);
-    const reorderedWithOrder = reordered.map((t, index) => ({ ...t, order: index }));
-    const todayStr = new Date().toISOString().slice(0, 10);
-    const withNewTimes = recalculateTimes(reorderedWithOrder, todayStr);
-    const completed = prev.filter((t) => t.status === "completed");
-    const completedWithOrder = completed.map((t, i) => ({ ...t, order: reordered.length + i }));
-    const updatedTasks = [...withNewTimes, ...completedWithOrder];
-
-    console.log("REORDER CALLED", updatedTasks);
-    setTasks(updatedTasks);
-    console.log("STATE AFTER SET", updatedTasks);
-
-    const apiUpdates = withNewTimes.filter((t) => !isLocalTask(t.id)).map((t) => ({ id: t.id, startTime: t.startTime, endTime: t.endTime ?? new Date(new Date(t.startTime).getTime() + (t.durationMinutes ?? 60) * 60000).toISOString() }));
-    for (const t of withNewTimes) {
-      if (isLocalTask(t.id)) {
-        updateLocalTask(t.id, { startTime: t.startTime, endTime: t.endTime });
-      }
-    }
-    if (apiUpdates.length > 0) {
-      try {
-        const res = await fetch(`${API_BASE}/api/tasks/reorder`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json", ...getActorHeaders() },
-          body: JSON.stringify(withActorBody({ tasks: apiUpdates })),
-        });
-        if (!res.ok) throw new Error("Reorder failed");
-      } catch {
-        // Do NOT call loadTasks() here — it overwrites state with server order and causes snap-back.
-        // Keep the optimistic reorder in state; server may sync on next full load.
-      }
+    const activeTask = incomplete.find((t) => t.id === activeId);
+    const overTask = incomplete.find((t) => t.id === overId);
+    if (!activeTask || !overTask || !getSupabaseClient()) return;
+    try {
+      await applySwapTaskSlots(taskToRowLike(activeTask), taskToRowLike(overTask));
+      await loadTasks();
+    } catch {
+      await loadTasks();
     }
   }
 
   return (
     <GlassCard className="animate-fade-in-up opacity-0 flex flex-col flex-1 min-h-0 overflow-x-hidden" style={{ animationDelay: "0.15s" }}>
-      <div className="flex items-center justify-between mb-3 shrink-0">
-        <h2 className="text-[1rem] font-medium text-white/90 tracking-tight">
+      <div className="flex items-center justify-between mb-4 shrink-0">
+        <h2 className="text-xl font-semibold text-white/90">
           Today&apos;s Tasks
         </h2>
         {canEditTasks && (
@@ -700,7 +744,9 @@ export default function DailyTasksCard({ readOnly = false, canEditTasks = true, 
                           transform: "scale(0.98)",
                         }}
                       >
-                        <span className="shrink-0 w-14 text-xs tabular-nums opacity-70">{formatTimeOnly(t.startTime)}</span>
+                        <span className="shrink-0 text-xs tabular-nums opacity-70 min-w-[7rem]">
+                          {formatTaskTimeRange(t.startTime, t.endTime ?? new Date(new Date(t.startTime).getTime() + (t.durationMinutes ?? 60) * 60000).toISOString(), t.durationMinutes)}
+                        </span>
                         <span className="min-w-0 flex-1 truncate text-[0.875rem] text-white/90 line-through">{t.title}</span>
                       </button>
                     </li>
@@ -716,10 +762,27 @@ export default function DailyTasksCard({ readOnly = false, canEditTasks = true, 
         <TaskActionModal
           task={selectedTask}
           onClose={() => { setSelectedTask(null); setIsLongPress(false); }}
-          onSkip={() => handleSkip(selectedTask)}
+          onSkip={() => openSkipModal(selectedTask)}
           onEdit={() => { setEditTask(selectedTask); setSelectedTask(null); setIsLongPress(false); }}
           onHowTo={() => handleHowTo(selectedTask)}
           canEditTasks={canEditTasks}
+        />
+      )}
+      {skipTaskModal && !replacePicker && (
+        <SkipTaskModal
+          taskTitle={skipTaskModal.title}
+          onChoose={handleSkipChoice}
+          onClose={() => setSkipTaskModal(null)}
+          onEdit={canEditTasks ? () => { setEditTask(skipTaskModal); setSkipTaskModal(null); } : undefined}
+        />
+      )}
+      {skipTaskModal && replacePicker && (
+        <ReplaceTaskPickerModal
+          skipTask={skipTaskModal}
+          candidates={tasks.filter((t) => t.id !== skipTaskModal.id && t.status !== "completed")}
+          onSelect={(t) => handleReplaceWith(t)}
+          onBack={() => setReplacePicker(false)}
+          onClose={() => { setSkipTaskModal(null); setReplacePicker(false); }}
         />
       )}
       {editTask && (

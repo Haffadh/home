@@ -1,11 +1,8 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
-
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE ||
-  process.env.NEXT_PUBLIC_API_BASE_URL ||
-  "http://127.0.0.1:3001";
+import { getApiBase } from "../../lib/api";
+import { getSupabaseClient } from "../../lib/supabaseClient";
 
 const AUTH_TOKEN_KEY = "smarthub_token";
 
@@ -15,6 +12,7 @@ type AuthState = {
   user: AuthUser | null;
   token: string | null;
   loading: boolean;
+  sessionReady: boolean;
 };
 
 type AuthContextValue = AuthState & {
@@ -29,10 +27,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [sessionReady, setSessionReady] = useState(false);
 
   const logout = useCallback(() => {
     if (typeof window !== "undefined") {
       localStorage.removeItem(AUTH_TOKEN_KEY);
+      localStorage.removeItem("token");
     }
     setToken(null);
     setUser(null);
@@ -43,11 +43,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem(AUTH_TOKEN_KEY, newToken);
     }
     setToken(newToken);
-    fetch(`${API_BASE}/auth/me`, {
-      headers: { Authorization: `Bearer ${newToken}` },
-    })
-      .then((res) => (res.ok ? res.json() : Promise.reject(new Error("Invalid"))))
-      .then((data) => setUser({ id: String(data.id), role: String(data.role ?? "") }))
+    getApiBase("/auth/me", { cache: "no-store" })
+      .then((data) => setUser({ id: String((data as { id?: string }).id), role: String((data as { role?: string }).role ?? "") }))
       .catch(() => setUser(null));
   }, []);
 
@@ -58,15 +55,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     setToken(stored);
-    fetch(`${API_BASE}/auth/me`, {
-      headers: { Authorization: `Bearer ${stored}` },
-    })
-      .then((res) => {
-        if (!res.ok) throw new Error("Invalid token");
-        return res.json();
-      })
+    getApiBase("/auth/me", { cache: "no-store" })
       .then((data) => {
-        setUser({ id: String(data.id), role: String(data.role ?? "") });
+        const d = data as { id?: string; role?: string };
+        setUser({ id: String(d.id), role: String(d.role ?? "") });
       })
       .catch(() => {
         if (typeof window !== "undefined") {
@@ -78,10 +70,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .finally(() => setLoading(false));
   }, []);
 
+  // When Supabase session is restored (or confirmed absent), allow API calls to run.
+  useEffect(() => {
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      setSessionReady(true);
+      return;
+    }
+    supabase.auth.getSession().then(() => setSessionReady(true));
+  }, []);
+
   const value: AuthContextValue = {
     user,
     token,
     loading,
+    sessionReady,
     login,
     logout,
     role: user?.role ?? null,

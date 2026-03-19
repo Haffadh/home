@@ -2,11 +2,7 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
-
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE ||
-  process.env.NEXT_PUBLIC_API_BASE_URL ||
-  "http://127.0.0.1:3001";
+import { getApiBase } from "../../lib/api";
 
 type Task = { id: number; title: string; is_done: boolean };
 type UrgentTask = { id: number; title: string; acknowledged?: boolean };
@@ -64,14 +60,13 @@ function DynamicIslandToast({ toast, onClose }: { toast: ToastState; onClose: ()
 }
 
 async function getHowTo(type: "task" | "meal", title: string, context?: string): Promise<string> {
-  const res = await fetch(`${API_BASE}/ai/howto`, {
+  const data = await getApiBase("/api/ai/howto", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ type, title, context }),
+    body: { type, title, context },
   });
-  const data = await res.json().catch(() => null);
-  if (!res.ok || !data?.ok) throw new Error(data?.error || "AI unavailable");
-  return String(data.answer || "").trim();
+  const d = data as { ok?: boolean; answer?: string; error?: string };
+  if (!d?.ok) throw new Error(d?.error || "AI unavailable");
+  return String(d.answer || "").trim();
 }
 
 export default function AboodPage() {
@@ -114,8 +109,8 @@ export default function AboodPage() {
     setLoading(true);
     try {
       const [t, u] = await Promise.allSettled([
-        fetch(`${API_BASE}/tasks/today/1`, { cache: "no-store" }).then((r) => r.json()),
-        fetch(`${API_BASE}/urgent_tasks`, { cache: "no-store" }).then((r) => r.json()),
+        getApiBase("/api/legacy/tasks/today/1", { cache: "no-store" }),
+        getApiBase("/api/urgent_tasks", { cache: "no-store" }),
       ]);
       setTasksToday(t.status === "fulfilled" && Array.isArray(t.value) ? t.value : []);
       setUrgentTasks(u.status === "fulfilled" && Array.isArray(u.value) ? u.value : []);
@@ -132,12 +127,10 @@ export default function AboodPage() {
     const prev = tasksToday;
     setTasksToday((p) => p.map((t) => (t.id === id ? { ...t, is_done: !current } : t)));
     try {
-      const res = await fetch(`${API_BASE}/tasks/${id}`, {
+      await getApiBase(`/api/legacy/tasks/${id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ is_done: !current }),
+        body: { is_done: !current },
       });
-      if (!res.ok) throw new Error(await res.text());
     } catch {
       setTasksToday(prev);
     }
@@ -149,12 +142,10 @@ export default function AboodPage() {
     const next = !Boolean(cur?.acknowledged);
     setUrgentTasks((p) => p.map((t) => (t.id === id ? ({ ...t, acknowledged: next } as any) : t)));
     try {
-      const res = await fetch(`${API_BASE}/urgent_tasks/${id}`, {
+      await getApiBase(`/api/urgent_tasks/${id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ acknowledged: next }),
+        body: { acknowledged: next },
       });
-      if (!res.ok) throw new Error(await res.text());
     } catch {
       setUrgentTasks(prev);
     }
@@ -165,13 +156,11 @@ export default function AboodPage() {
     if (!t) return;
     openToast({ status: "loading", title: "Updating…", subtitle: "", emoji: "✍️" });
     try {
-      const path = menu.entity === "urgent_task" ? `/urgent_tasks/${menu.itemId}` : `/tasks/${menu.itemId}`;
-      const res = await fetch(`${API_BASE}${path}`, {
+      const path = menu.entity === "urgent_task" ? `/api/urgent_tasks/${menu.itemId}` : `/api/legacy/tasks/${menu.itemId}`;
+      await getApiBase(path, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: t }),
+        body: { title: t },
       });
-      if (!res.ok) throw new Error(await res.text());
       setMenu((p) => ({ ...p, open: false }));
       await refresh();
       openToast({ status: "success", title: "Updated", subtitle: "", emoji: "✍️" });
@@ -186,9 +175,8 @@ export default function AboodPage() {
   async function doDelete() {
     openToast({ status: "loading", title: "Deleting…", subtitle: "", emoji: "🗑️" });
     try {
-      const path = menu.entity === "urgent_task" ? `/urgent_tasks/${menu.itemId}` : `/tasks/${menu.itemId}`;
-      const res = await fetch(`${API_BASE}${path}`, { method: "DELETE" });
-      if (!res.ok) throw new Error(await res.text());
+      const path = menu.entity === "urgent_task" ? `/api/urgent_tasks/${menu.itemId}` : `/api/legacy/tasks/${menu.itemId}`;
+      await getApiBase(path, { method: "DELETE" });
       setMenu((p) => ({ ...p, open: false }));
       await refresh();
       openToast({ status: "success", title: "Deleted", subtitle: "", emoji: "🗑️" });
@@ -239,18 +227,18 @@ export default function AboodPage() {
 
             {menu.step === "menu" ? (
               <div className="mt-3 space-y-2">
-                <button onClick={runHowTo} className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white/90 hover:bg-white/10">
+                <button onClick={runHowTo} className="w-full rounded-xl border border-white/10 bg-[#0f172a]/70 px-3 py-2 text-xs font-semibold text-white/90 hover:bg-[#0f172a]/80 transition active:scale-[0.97]">
                   How to?
                 </button>
                 <button
                   onClick={() => setMenu((p) => ({ ...p, step: "edit", editValue: p.editValue ?? p.title }))}
-                  className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white/90 hover:bg-white/10"
+                  className="w-full rounded-xl border border-white/10 bg-[#0f172a]/70 px-3 py-2 text-xs font-semibold text-white/90 hover:bg-[#0f172a]/80 transition active:scale-[0.97]"
                 >
                   Edit
                 </button>
                 <button
                   onClick={() => setMenu((p) => ({ ...p, step: "confirm_delete" }))}
-                  className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-rose-100 hover:bg-white/10"
+                  className="w-full rounded-xl border border-white/10 bg-[#0f172a]/70 px-3 py-2 text-xs font-semibold text-rose-100 hover:bg-[#0f172a]/80 transition active:scale-[0.97]"
                 >
                   Delete
                 </button>
@@ -263,24 +251,24 @@ export default function AboodPage() {
                   className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white/90 outline-none"
                 />
                 <div className="flex gap-2">
-                  <button onClick={saveEdit} className="flex-1 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white/90 hover:bg-white/10">
+                  <button onClick={saveEdit} className="flex-1 rounded-xl border border-white/10 bg-[#0f172a]/70 px-3 py-2 text-xs font-semibold text-white/90 hover:bg-[#0f172a]/80 transition active:scale-[0.97]">
                     Save
                   </button>
-                  <button onClick={() => setMenu((p) => ({ ...p, step: "menu" }))} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white/70 hover:bg-white/10">
-                    Back
-                  </button>
+<button onClick={() => setMenu((p) => ({ ...p, step: "menu" }))} className="rounded-xl border border-white/10 bg-[#0f172a]/70 px-3 py-2 text-xs font-semibold text-white/70 hover:bg-[#0f172a]/80 transition active:scale-[0.97]">
+                  Back
+                </button>
                 </div>
               </div>
             ) : menu.step === "confirm_delete" ? (
               <div className="mt-3 space-y-2">
                 <div className="text-xs text-white/70">Delete this item?</div>
                 <div className="flex gap-2">
-                  <button onClick={doDelete} className="flex-1 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-rose-100 hover:bg-white/10">
+                  <button onClick={doDelete} className="flex-1 rounded-xl border border-white/10 bg-[#0f172a]/70 px-3 py-2 text-xs font-semibold text-rose-100 hover:bg-[#0f172a]/80 transition">
                     Delete
                   </button>
-                  <button onClick={() => setMenu((p) => ({ ...p, step: "menu" }))} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white/70 hover:bg-white/10">
-                    Cancel
-                  </button>
+<button onClick={() => setMenu((p) => ({ ...p, step: "menu" }))} className="rounded-xl border border-white/10 bg-[#0f172a]/70 px-3 py-2 text-xs font-semibold text-white/70 hover:bg-[#0f172a]/80 transition active:scale-[0.97]">
+                  Cancel
+                </button>
                 </div>
               </div>
             ) : menu.step === "answer" ? (
@@ -300,7 +288,7 @@ export default function AboodPage() {
         <div className="text-2xl font-extrabold tracking-tight">Abood</div>
         <div className="mt-1 text-sm text-white/55">Tasks, urgent, and meals.</div>
 
-        <div className="mt-5 rounded-[22px] border border-white/10 bg-white/5 p-4 backdrop-blur-xl">
+        <div className="mt-5 rounded-3xl p-6 bg-[#0f172a]/70 backdrop-blur-xl border border-white/10 shadow-xl transition hover:bg-[#0f172a]/80">
           <div className="text-sm font-semibold text-white/85">Today</div>
           {loading ? (
             <div className="mt-3 text-sm text-white/55">Loading…</div>
@@ -329,7 +317,7 @@ export default function AboodPage() {
           )}
         </div>
 
-        <div className="mt-4 rounded-[22px] border border-white/10 bg-white/5 p-4 backdrop-blur-xl">
+        <div className="mt-4 rounded-3xl p-6 bg-[#0f172a]/70 backdrop-blur-xl border border-white/10 shadow-xl transition hover:bg-[#0f172a]/80">
           <div className="text-sm font-semibold text-white/85">Urgent</div>
           {loading ? (
             <div className="mt-3 text-sm text-white/55">Loading…</div>

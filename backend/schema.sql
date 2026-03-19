@@ -1,34 +1,32 @@
--- Users of the system
 CREATE TABLE users (
   id SERIAL PRIMARY KEY,
-  name TEXT NOT NULL,
-  role TEXT NOT NULL, -- admin, family, staff, tablet
-  created_at TIMESTAMP DEFAULT now()
+  name TEXT,
+  email TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- Recurring weekly tasks
-CREATE TABLE tasks (
+CREATE TABLE devices (
   id SERIAL PRIMARY KEY,
-  title TEXT NOT NULL,
-  assigned_to INTEGER REFERENCES users(id),
-  day_of_week INTEGER, -- 0 = Sunday, 6 = Saturday
-  is_recurring BOOLEAN DEFAULT true,
-  created_at TIMESTAMP DEFAULT now()
+  name TEXT,
+  device_id TEXT,
+  room TEXT,
+  status INTEGER DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- One-time urgent tasks
-CREATE TABLE urgent_tasks (
+CREATE TABLE schedules (
   id SERIAL PRIMARY KEY,
-  title TEXT NOT NULL,
-  assigned_to INTEGER REFERENCES users(id),
-  acknowledged BOOLEAN DEFAULT false,
-  created_at TIMESTAMP DEFAULT now()
+  device_id INTEGER,
+  day_of_week INTEGER,
+  hour INTEGER,
+  minute INTEGER,
+  is_recurring INTEGER DEFAULT 1,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- Daily meals
-CREATE TABLE meals (
+CREATE TABLE alerts (
   id SERIAL PRIMARY KEY,
-  date DATE NOT NULL,
-  meal_type TEXT NOT NULL, -- breakfast, lunch, dinner
-  description TEXT NOT NULL
+  message TEXT,
+  acknowledged INTEGER DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );

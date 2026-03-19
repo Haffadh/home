@@ -15,10 +15,16 @@
   --color-foreground: var(--foreground);
 }
 
+html {
+  font-size: 21px; /* base 16px + 5px global bump */
+}
+
 html,
 body {
   height: 100%;
   overflow-x: hidden;
+  overscroll-behavior: none;
+  background: #020617;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -30,8 +36,12 @@ html.home-no-scroll body {
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background:
+    radial-gradient(circle at 20% 10%, #1e3a8a 0%, transparent 40%),
+    radial-gradient(circle at 80% 20%, #2563eb 0%, transparent 40%),
+    linear-gradient(to bottom, #020617, #020617);
+  min-height: 100vh;
+  color: white;
   font-family: var(--font-sans);
   position: relative;
 }
@@ -46,9 +56,10 @@ html.dark body {
 
 html.dark body {
   background:
-    radial-gradient(1200px 600px at 50% -200px, rgba(59, 130, 246, 0.25), transparent),
-    linear-gradient(to bottom, #020617, #0b1120);
-  height: 100%;
+    radial-gradient(circle at 20% 10%, #1e3a8a 0%, transparent 40%),
+    radial-gradient(circle at 80% 20%, #2563eb 0%, transparent 40%),
+    linear-gradient(to bottom, #020617, #020617);
+  min-height: 100vh;
   color: #fff;
 }
 
@@ -62,7 +73,12 @@ html.dark body::before {
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
-/* Home grid: on xl give first row flexible height so Today's Tasks card can use space and scroll internally */
+/* Home grid: on md+ (tablet) use 3 columns; on larger give first row flexible height so Today's Tasks card can use space and scroll internally */
+@media (min-width: 768px) {
+  .home-grid {
+    grid-template-rows: min-content min-content 1fr;
+  }
+}
 @media (min-width: 1280px) {
   .home-grid {
     grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
@@ -70,51 +86,48 @@ html.dark body::before {
 }
 
 .glass-card {
+  border-radius: 1.5rem;
+  padding: 1.5rem;
+  background: rgba(15, 23, 42, 0.7);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 1.75rem;
-  box-shadow:
-    0 25px 50px -12px rgba(0, 0, 0, 0.25),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  transition: background 0.2s ease, transform 0.3s ease, box-shadow 0.3s ease;
 }
 
 .glass-card:hover {
-  transform: translateY(-4px);
+  background: rgba(15, 23, 42, 0.8);
+  transform: translateY(-2px);
   box-shadow:
     0 30px 60px -12px rgba(0, 0, 0, 0.3),
-    0 0 40px -10px rgba(59, 130, 246, 0.15),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    0 0 40px -10px rgba(59, 130, 246, 0.12);
 }
 
 .glass-card:active {
-  transform: translateY(-2px) scale(0.99);
+  transform: translateY(-1px) scale(0.99);
 }
 
 .glass-bubble {
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 9999px;
-  box-shadow:
-    0 8px 32px rgba(0, 0, 0, 0.15),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  transition: transform 0.3s ease, box-shadow 0.3s ease, background 0.2s ease;
 }
 
 .glass-bubble:hover {
+  background: rgba(30, 41, 59, 0.8);
   transform: translateY(-4px) scale(1.02);
   box-shadow:
     0 12px 40px rgba(0, 0, 0, 0.2),
-    0 0 24px -8px rgba(59, 130, 246, 0.12),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    0 0 24px -8px rgba(59, 130, 246, 0.12);
 }
 
 .glass-input {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(15, 23, 42, 0.5);
   border: 1px solid var(--glass-border);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
@@ -175,6 +188,16 @@ html.dark body::before {
 .stagger-3 { animation-delay: 0.15s; }
 .stagger-4 { animation-delay: 0.2s; }
 .stagger-5 { animation-delay: 0.25s; }
+
+@keyframes sparkle {
+  0%, 100% { opacity: 0.4; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+
+.ai-sparkle {
+  animation: sparkle 2s ease-in-out infinite;
+  display: inline-block;
+}
 
 .no-scrollbar::-webkit-scrollbar {
   display: none;

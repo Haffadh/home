@@ -14,10 +14,13 @@
     "@dnd-kit/sortable": "^8.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@fastify/cors": "^11.2.0",
+    "@supabase/supabase-js": "^2.98.0",
     "framer-motion": "^12.27.0",
+    "jspdf": "^4.2.0",
     "next": "16.1.2",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "zustand": "^5.0.11"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

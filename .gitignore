@@ -144,4 +144,5 @@ node_modules/
 *.zip
 
 backend/.env
-frontend/.env.local
+frontend/.env.localbackend/smart-home.db
+.DS_Store

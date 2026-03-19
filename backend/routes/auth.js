@@ -4,6 +4,7 @@ import {
   generateAccessToken,
   generateRefreshToken,
   hashRefreshToken,
+  signToken,
   REFRESH_TOKEN_EXPIRY,
 } from "../lib/auth.js";
 
@@ -14,6 +15,15 @@ export default async function authRoutes(fastify, { db, requireAuth }) {
       return reply.send({ id: request.user.id, role: request.user.role });
     });
   }
+
+  // ---- POST /auth/role-login (no password — MVP panel selector) ----
+  fastify.post("/auth/role-login", async (request, reply) => {
+    const body = request.body || {};
+    const role = typeof body.role === "string" ? body.role.trim() : "";
+    if (!role) return reply.code(400).send({ ok: false, error: "role required" });
+    const accessToken = signToken({ id: `role-${role}`, role }, 30 * 24 * 60 * 60); // 30 days
+    return reply.send({ ok: true, accessToken, role });
+  });
 
   // ---- POST /auth/register ----
   fastify.post("/auth/register", async (request, reply) => {

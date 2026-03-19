@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { getApiBase } from "../../lib/api";
+import { getApiBase } from "../../../lib/api";
 import { useRealtimeEvent } from "../../context/RealtimeContext";
 import GlassCard from "./GlassCard";
 
@@ -23,8 +23,7 @@ export default function ActivityBubble() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${getApiBase()}/activity?limit=50`, { cache: "no-store" });
-      const data = await res.json().catch(() => []);
+      const data = await getApiBase("/api/activity?limit=50");
       setEntries(Array.isArray(data) ? data : []);
     } catch {
       setEntries([]);
