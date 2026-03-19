@@ -118,7 +118,7 @@ export default function SceneEditorModal({ scene, devices, onClose, onSave }: Pr
 
   function updateAction(index: number, patch: Partial<SceneAction>) {
     setActions((prev) =>
-      prev.map((a, i) => (i === index ? { ...a, ...patch } : a))
+      prev.map((a, i) => (i === index ? { ...a, ...patch } as SceneAction : a))
     );
   }
 
