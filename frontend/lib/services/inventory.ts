@@ -12,10 +12,16 @@ export type InventoryRow = {
   name: string;
   category: InventoryCategory;
   quantity: number;
+  unit: string;
+  threshold: number;
   /** Same as expiration_date; kept for backward compatibility. */
   expiry_date: string | null;
   expiration_date: string | null;
   updated_at: string | null;
+  created_at: string;
+  last_confirmed_at: string | null;
+  location: string | null;
+  default_location: string | null;
 };
 
 export type InventoryInsert = {
@@ -29,38 +35,31 @@ export type InventoryInsert = {
 
 const SELECT_COLS = "id,item,category,quantity,expiration_date,updated_at";
 
-function dbToRow(row: { id: string; item: string; category: string; quantity: number; expiration_date: string | null; updated_at: string | null }): InventoryRow {
-  const exp = row.expiration_date ?? null;
+function dbToRow(row: Record<string, unknown>): InventoryRow {
+  const exp = (row.expiration_date ?? null) as string | null;
   return {
-    id: row.id,
-    name: row.item,
-    category: row.category as InventoryCategory,
-    quantity: row.quantity ?? 0,
+    id: String(row.id),
+    name: String(row.item ?? row.name ?? ""),
+    category: (row.category as InventoryCategory) ?? "Food",
+    quantity: Number(row.quantity ?? 0),
+    unit: String(row.unit ?? "pcs"),
+    threshold: Number(row.threshold ?? 2),
     expiry_date: exp,
     expiration_date: exp,
-    updated_at: row.updated_at ?? null,
+    updated_at: (row.updated_at as string) ?? null,
+    created_at: String(row.created_at ?? ""),
+    last_confirmed_at: (row.last_confirmed_at as string) ?? null,
+    location: (row.location as string) ?? null,
+    default_location: (row.default_location as string) ?? null,
   };
 }
 
 /** Fetches inventory from the backend API (GET /api/inventory). */
 export async function fetchInventoryFromApi(): Promise<InventoryRow[]> {
-  console.log("[inventory] Fetching inventory...");
   try {
-    const data = (await getApiBase("/api/inventory", { cache: "no-store" }) as { ok?: boolean; items?: Array<{ id: string; item?: string; name?: string; category: string; quantity: number; expiration_date?: string | null; expiry_date?: string | null; updated_at?: string | null }> });
+    const data = (await getApiBase("/api/inventory", { cache: "no-store" }) as { ok?: boolean; items?: Record<string, unknown>[] });
     const items = data?.items ?? [];
-    return items.map((row) => {
-      const name = row.item ?? row.name ?? "";
-      const exp = row.expiration_date ?? row.expiry_date ?? null;
-      return {
-        id: row.id,
-        name,
-        category: row.category as InventoryCategory,
-        quantity: row.quantity ?? 0,
-        expiry_date: exp,
-        expiration_date: exp,
-        updated_at: row.updated_at ?? null,
-      };
-    });
+    return items.map((row) => dbToRow(row));
   } catch (e) {
     console.error("[inventory] fetchInventoryFromApi", e);
     throw e;
@@ -76,7 +75,7 @@ export async function fetchInventory(category?: InventoryCategory): Promise<Inve
     console.error("[inventory] fetchInventory", error.message, error);
     throw new Error(error.message);
   }
-  return ((data ?? []) as { id: string; item: string; category: string; quantity: number; expiration_date: string | null; updated_at: string | null }[]).map(dbToRow);
+  return ((data ?? []) as Record<string, unknown>[]).map(dbToRow);
 }
 
 /** Food category only (for expiration and audit). */
@@ -96,7 +95,7 @@ export async function fetchExpiringInventory(withinDays?: number): Promise<Inven
     console.error("[inventory] fetchExpiringInventory", error.message, error);
     throw new Error(error.message);
   }
-  const rows = ((data ?? []) as { id: string; item: string; category: string; quantity: number; expiration_date: string | null; updated_at: string | null }[]).map(dbToRow);
+  const rows = ((data ?? []) as Record<string, unknown>[]).map(dbToRow);
   if (withinDays == null) return rows;
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() + withinDays);
@@ -122,7 +121,7 @@ export async function updateInventoryItem(
     console.error("[inventory] updateInventoryItem", error.message, error);
     throw new Error(error.message);
   }
-  return dbToRow(data as { id: string; item: string; category: string; quantity: number; expiration_date: string | null; updated_at: string | null });
+  return dbToRow(data as Record<string, unknown>);
 }
 
 export async function createInventoryItem(row: InventoryInsert): Promise<InventoryRow> {
@@ -141,7 +140,7 @@ export async function createInventoryItem(row: InventoryInsert): Promise<Invento
     console.error("[inventory] createInventoryItem", error.message, error);
     throw new Error(error.message);
   }
-  return dbToRow(data as { id: string; item: string; category: string; quantity: number; expiration_date: string | null; updated_at: string | null });
+  return dbToRow(data as Record<string, unknown>);
 }
 
 export async function deleteInventoryItem(id: string): Promise<void> {

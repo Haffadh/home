@@ -254,7 +254,7 @@ function AuditModal({ inventoryItems, onClose, onDone }: {
                           <p className="text-[0.8125rem] text-white/90 truncate">{entry.item.name}</p>
                           <p className="text-[0.6875rem] text-white/40">{entry.item.quantity} {entry.item.unit}</p>
                         </div>
-                        {entry.audited && <span className="text-emerald-400 text-sm">✓</span>}
+                        {entry.status !== "pending" && <span className="text-emerald-400 text-sm">✓</span>}
                       </button>
                     ))}
                   </div>

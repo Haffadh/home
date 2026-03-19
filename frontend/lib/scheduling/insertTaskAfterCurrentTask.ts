@@ -1,4 +1,5 @@
 import type { TaskRow } from "../services/tasks";
+import { shiftTasksForward } from "./shiftTasksForward";
 
 /**
  * Inserts a new task block immediately after the current task and shifts later tasks forward.
