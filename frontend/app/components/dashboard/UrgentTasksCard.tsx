@@ -10,7 +10,8 @@ import { formatTimeOnly } from "../../../lib/scheduling/formatTaskTimeRange";
 type UrgentTask = {
   id: number;
   title: string;
-  acknowledged?: boolean;
+  acknowledged?: boolean; // done/completed
+  seen?: boolean; // acknowledged/working on it
   created_at?: string;
   submitted_by?: string;
   priority?: number; // 1=normal, 2=high, 3=critical
@@ -77,7 +78,7 @@ export default function UrgentTasksCard({ canEditTasks = true, readOnly = false,
     }
   }
 
-  async function toggleAcknowledge(task: UrgentTask) {
+  async function toggleDone(task: UrgentTask) {
     if (readOnly) return;
     const next = !task.acknowledged;
     // Optimistic update
@@ -156,29 +157,33 @@ export default function UrgentTasksCard({ canEditTasks = true, readOnly = false,
               {/* Pending tasks */}
               {pending.map((t) => {
                 const prio = t.priority ?? 1;
-                const borderColor = prio === 3 ? "rgba(244,63,94,0.2)" : prio === 2 ? "rgba(245,158,11,0.15)" : "rgba(255,255,255,0.06)";
+                const isSeen = t.seen && !t.acknowledged;
+                const borderColor = isSeen ? "rgba(52,211,153,0.2)" : prio === 3 ? "rgba(244,63,94,0.2)" : prio === 2 ? "rgba(245,158,11,0.15)" : "rgba(255,255,255,0.06)";
                 return (
                   <li key={t.id}>
                     <button
                       type="button"
-                      onClick={() => toggleAcknowledge(t)}
+                      onClick={() => toggleDone(t)}
                       className={`w-full flex items-center gap-3 rounded-2xl border px-3.5 py-2.5 backdrop-blur-xl transition-all duration-300 ease-out text-left hover:-translate-y-0.5 ${simplified ? "py-4 min-h-[56px]" : ""}`}
                       style={{
                         borderColor,
-                        background: prio === 3
-                          ? "linear-gradient(180deg, rgba(244,63,94,0.08) 0%, rgba(244,63,94,0.02) 100%)"
-                          : prio === 2
-                            ? "linear-gradient(180deg, rgba(245,158,11,0.06) 0%, rgba(245,158,11,0.02) 100%)"
-                            : "linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%)",
+                        background: isSeen
+                          ? "linear-gradient(180deg, rgba(52,211,153,0.06) 0%, rgba(52,211,153,0.02) 100%)"
+                          : prio === 3
+                            ? "linear-gradient(180deg, rgba(244,63,94,0.08) 0%, rgba(244,63,94,0.02) 100%)"
+                            : prio === 2
+                              ? "linear-gradient(180deg, rgba(245,158,11,0.06) 0%, rgba(245,158,11,0.02) 100%)"
+                              : "linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%)",
                         boxShadow: "0 2px 12px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.05)",
                       }}
                     >
-                      <span className={`w-2 h-2 rounded-full shrink-0 ${prio === 3 ? "bg-rose-400" : prio === 2 ? "bg-amber-400" : "bg-white/30"}`} />
+                      <span className={`w-2 h-2 rounded-full shrink-0 ${isSeen ? "bg-emerald-400" : prio === 3 ? "bg-rose-400" : prio === 2 ? "bg-amber-400" : "bg-white/30"}`} />
                       <div className="min-w-0 flex-1">
                         <p className="text-[0.875rem] font-medium text-white/90 truncate">{t.title}</p>
-                        <p className="text-[0.6875rem] text-white/45 tabular-nums mt-0.5">
-                          {formatTimeOnly(t.created_at)}
-                        </p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-[0.6875rem] text-white/45 tabular-nums">{formatTimeOnly(t.created_at)}</span>
+                          {isSeen && <span className="text-[0.5625rem] text-emerald-400/70">Working on it</span>}
+                        </div>
                       </div>
                     </button>
                   </li>
@@ -189,7 +194,7 @@ export default function UrgentTasksCard({ canEditTasks = true, readOnly = false,
                 <li key={t.id}>
                   <button
                     type="button"
-                    onClick={() => toggleAcknowledge(t)}
+                    onClick={() => toggleDone(t)}
                     className={`w-full flex items-center gap-3 rounded-2xl border border-white/[0.04] px-3.5 py-2.5 backdrop-blur-xl transition-all text-left opacity-35 scale-[0.98] ${simplified ? "py-4 min-h-[56px]" : ""}`}
                     style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%)" }}
                   >

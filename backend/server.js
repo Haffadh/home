@@ -1123,14 +1123,17 @@ fastify.get("/api/urgent_tasks/:userId", { preHandler: [requireAuth] }, async (r
   return rows;
 });
 
+// Acknowledge = "seen" — Abdullah has seen the alert, stops the sound, task stays active
 fastify.patch("/api/urgent_tasks/:id/ack", { preHandler: [requireAuth] }, async (request, reply) => {
   const id = request.params.id;
-  const { rows } = await db.query("UPDATE urgent_tasks SET acknowledged = true WHERE id = $1 RETURNING *", [id]);
+  const { rows } = await db.query("UPDATE urgent_tasks SET seen = true WHERE id = $1 RETURNING *", [id]);
   if (!rows[0]) return sendError(reply, 404, "Urgent task not found");
   const actor = getActor(request);
-  await logActivity(db, { ...actor, action: "toggled", entity_type: "urgent_task", entity_id: id, payload_json: { acknowledged: true } });
+  await logActivity(db, { ...actor, action: "seen", entity_type: "urgent_task", entity_id: id, payload_json: { seen: true } });
   broadcast(fastify, "urgent_updated", {});
   broadcast(fastify, "urgent_alert_ack", { id });
+  // Notify the submitter that Abdullah has seen it
+  broadcast(fastify, "urgent_seen", { id, title: rows[0].title, submittedBy: rows[0].submitted_by });
   return reply.send(rows[0]);
 });
 

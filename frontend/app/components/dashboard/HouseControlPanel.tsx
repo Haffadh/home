@@ -328,11 +328,10 @@ export default function HouseControlPanel() {
           return;
         }
       } catch { /* ignore */ }
-      // Not busy — create as normal task in next free slot
-      const today = new Date().toISOString().slice(0, 10);
-      getApiBase("/api/tasks", {
+      // Not busy — still create as urgent task with alert
+      getApiBase("/api/urgent_tasks", {
         method: "POST",
-        body: withActorBody({ title: opts.title, date: today, timeWindow: "auto", durationMinutes: 60, category: opts.category || "misc" }),
+        body: withActorBody({ title: opts.title, priority: 2, alert: true }),
       }).catch(() => {});
       return;
     }
