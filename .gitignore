@@ -146,3 +146,4 @@ node_modules/
 backend/.env
 frontend/.env.localbackend/smart-home.db
 .DS_Store
+.vercel
