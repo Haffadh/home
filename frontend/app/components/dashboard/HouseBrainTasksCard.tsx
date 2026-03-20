@@ -295,6 +295,7 @@ export default function HouseBrainTasksCard({
   const [newTitle, setNewTitle] = useState("");
   const [newCategory, setNewCategory] = useState("misc");
   const [newDuration, setNewDuration] = useState(30);
+  const [newTime, setNewTime] = useState("");
   const [adding, setAdding] = useState(false);
   const scrollRef = useRef<HTMLUListElement>(null);
   const [fadeTop, setFadeTop] = useState(false);
@@ -497,13 +498,17 @@ export default function HouseBrainTasksCard({
     setAdding(true);
     try {
       const today = new Date().toISOString().slice(0, 10);
+      const taskBody = newTime
+        ? { title: t, date: today, startTime: newTime, durationMinutes: newDuration, category: newCategory }
+        : { title: t, date: today, timeWindow: "auto", durationMinutes: newDuration, category: newCategory };
       await getApiBase("/api/tasks", {
         method: "POST",
-        body: withActorBody({ title: t, date: today, timeWindow: "auto", durationMinutes: newDuration, category: newCategory }),
+        body: withActorBody(taskBody),
       });
       setNewTitle("");
       setNewCategory("misc");
       setNewDuration(30);
+      setNewTime("");
       setShowAdd(false);
       await loadTasks();
     } catch { /* ignore */ }
@@ -550,6 +555,9 @@ export default function HouseBrainTasksCard({
                 <option value={90}>1.5h</option>
                 <option value={120}>2h</option>
               </select>
+              <input type="time" value={newTime} onChange={(e) => setNewTime(e.target.value)}
+                className="rounded-xl border border-white/10 bg-white/5 px-2 py-1.5 text-[0.75rem] text-white/70 outline-none"
+                placeholder="Auto" title={newTime ? `Start at ${newTime}` : "Auto-schedule"} />
             </div>
           </form>
         )}

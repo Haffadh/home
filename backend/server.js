@@ -166,12 +166,17 @@ async function findUserIdByName(name) {
   } catch { return null; }
 }
 
-async function createUrgentTask({ title, assigned_to, priority }) {
+async function createUrgentTask({ title, assigned_to, priority, alert_on_free, submitted_by }) {
   const t = typeof title === "string" ? title.trim() : "";
   if (!t) throw new Error("title required");
   const assigned = typeof assigned_to === "number" && Number.isFinite(assigned_to) ? assigned_to : null;
   const prio = typeof priority === "number" ? Math.max(1, Math.min(3, priority)) : 1;
-  const { rows } = await db.query("INSERT INTO urgent_tasks (title, assigned_to, priority) VALUES ($1, $2, $3) RETURNING *", [t, assigned, prio]);
+  const aof = Boolean(alert_on_free);
+  const sub = typeof submitted_by === "string" ? submitted_by.trim() : null;
+  const { rows } = await db.query(
+    "INSERT INTO urgent_tasks (title, assigned_to, priority, alert_on_free, submitted_by) VALUES ($1, $2, $3, $4, $5) RETURNING *",
+    [t, assigned, prio, aof, sub]
+  );
   return rows[0];
 }
 
@@ -397,6 +402,14 @@ fastify.patch("/api/tasks/:id/complete", { preHandler: [requireAuth] }, async (r
   const actor = getActor(request);
   await logActivity(db, { ...actor, action: "toggled", entity_type: "task", entity_id: task.id, payload_json: { status: "completed" } });
   broadcast(fastify, "tasks_updated", {});
+  // Check for waiting urgent tasks that should alert now
+  try {
+    const { rows: waiting } = await db.query("SELECT * FROM urgent_tasks WHERE alert_on_free = true AND acknowledged = false ORDER BY id ASC");
+    for (const w of waiting) {
+      await db.query("UPDATE urgent_tasks SET alert_on_free = false WHERE id = $1", [w.id]);
+      broadcast(fastify, "urgent_alert", { id: w.id, title: w.title, submittedBy: w.submitted_by });
+    }
+  } catch { /* ignore */ }
   return reply.send({ ok: true, task: toNormalizedTask(task) });
 });
 
@@ -1080,10 +1093,17 @@ fastify.post("/api/urgent_tasks", { preHandler: [requireAuth] }, async (request,
   let assigned_to = body.assigned_to;
   if ((assigned_to == null || assigned_to === "") && body.assigned_to_name?.trim()) assigned_to = await findUserIdByName(body.assigned_to_name.trim());
   try {
-    const task = await createUrgentTask({ title: body.title, assigned_to, priority: body.priority });
+    const task = await createUrgentTask({
+      title: body.title, assigned_to, priority: body.priority,
+      alert_on_free: body.alert_on_free, submitted_by: body.submitted_by || body.actorName,
+    });
     const actor = getActor(request);
     await logActivity(db, { ...actor, action: "created", entity_type: "urgent_task", entity_id: String(task?.id), payload_json: { title: body.title } });
     broadcast(fastify, "urgent_updated", {});
+    // If alert flag is set, fire urgent_alert to all clients
+    if (body.alert) {
+      broadcast(fastify, "urgent_alert", { id: task.id, title: task.title, submittedBy: task.submitted_by });
+    }
     return reply.send(task);
   } catch (e) { return sendError(reply, 400, "Invalid urgent task"); }
 });
@@ -1110,6 +1130,7 @@ fastify.patch("/api/urgent_tasks/:id/ack", { preHandler: [requireAuth] }, async 
   const actor = getActor(request);
   await logActivity(db, { ...actor, action: "toggled", entity_type: "urgent_task", entity_id: id, payload_json: { acknowledged: true } });
   broadcast(fastify, "urgent_updated", {});
+  broadcast(fastify, "urgent_alert_ack", { id });
   return reply.send(rows[0]);
 });
 

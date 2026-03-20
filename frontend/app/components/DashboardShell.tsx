@@ -8,6 +8,7 @@ import { ROLE_LABELS, getStoredRole } from "../../lib/roles";
 import { can } from "../../lib/permissions";
 import { getApiBase } from "../../lib/api";
 import GatheringModal from "./dashboard/GatheringModal";
+import UrgentAlertOverlay from "./dashboard/UrgentAlertOverlay";
 import NotificationBell from "./NotificationBell";
 import MusicControl from "./MusicControl";
 
@@ -298,6 +299,7 @@ export default function DashboardShell({
         open={gatheringOpen}
         onClose={() => setGatheringOpen(false)}
       />
+      <UrgentAlertOverlay />
     </div>
     </SceneTriggerContext.Provider>
   );

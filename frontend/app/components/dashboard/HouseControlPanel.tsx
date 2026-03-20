@@ -304,45 +304,45 @@ export default function HouseControlPanel() {
 
   async function handleCreateTask(opts: { title: string; category: string; room: string; urgent: boolean; recurring: boolean }) {
     if (opts.urgent) {
-      if (!getSupabaseClient()) {
-        getApiBase("/api/urgent_tasks", { method: "POST", body: withActorBody({ title: opts.title }) }).catch(() => {});
-        return;
-      }
+      // Check if Abdullah is busy by fetching today's tasks
       try {
-        const today = new Date().toISOString().slice(0, 10);
-        const rows = await tasksService.fetchTasks({ date: today });
-        const pending = rows.filter((r) => r.status !== "completed").sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
-        const current = getCurrentTask(rows, new Date());
+        const data = (await getApiBase("/api/tasks", { cache: "no-store" })) as { tasks?: Array<Record<string, unknown>> };
+        const tasks = data?.tasks ?? [];
+        const now = new Date();
+        const current = tasks.find((t) => {
+          if (t.status === "completed") return false;
+          const s = t.startTime ? new Date(String(t.startTime)) : null;
+          const e = t.endTime ? new Date(String(t.endTime)) : null;
+          return s && e && s <= now && now < e;
+        });
         if (current) {
-          const untilTime = new Date(current.end_time).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", hour12: true });
+          const endTime = new Date(String(current.endTime));
+          const untilTime = endTime.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", hour12: true });
           setAbdullahBusy({
-            taskName: current.title,
+            taskName: String(current.title ?? ""),
             untilTime,
             opts,
-            currentTask: current,
-            todayRows: pending,
+            currentTask: current as Record<string, unknown>,
+            todayRows: [],
           });
           return;
         }
-        getApiBase("/api/urgent_tasks", { method: "POST", body: withActorBody({ title: opts.title }) }).catch(() => {});
-      } catch {
-        getApiBase("/api/urgent_tasks", { method: "POST", body: withActorBody({ title: opts.title }) }).catch(() => {});
-      }
+      } catch { /* ignore */ }
+      // Not busy — create as normal task in next free slot
+      const today = new Date().toISOString().slice(0, 10);
+      getApiBase("/api/tasks", {
+        method: "POST",
+        body: withActorBody({ title: opts.title, date: today, timeWindow: "auto", durationMinutes: 60, category: opts.category || "misc" }),
+      }).catch(() => {});
       return;
     }
-    if (!getSupabaseClient()) return;
+    // Non-urgent: schedule in next free slot
     try {
-      const start = new Date();
-      const end = new Date(start.getTime() + 60 * 60 * 1000);
-      await tasksService.createTask({
-        title: opts.title,
-        assigned_by: role ?? "House",
-        start_time: start.toISOString(),
-        end_time: end.toISOString(),
-        duration: 60,
-        room: opts.room,
+      const today = new Date().toISOString().slice(0, 10);
+      await getApiBase("/api/tasks", {
+        method: "POST",
+        body: withActorBody({ title: opts.title, date: today, timeWindow: "auto", durationMinutes: 60, category: opts.category || "misc" }),
       });
-      await loadTodayTasks();
     } catch {
       // ignore
     }
@@ -350,34 +350,30 @@ export default function HouseControlPanel() {
 
   async function handleAbdullahBusyUrgent() {
     if (!abdullahBusy) return;
-    getApiBase("/api/urgent_tasks", { method: "POST", body: withActorBody({ title: abdullahBusy.opts.title }) }).catch(() => {});
+    // Create urgent task with immediate alert
+    getApiBase("/api/urgent_tasks", {
+      method: "POST",
+      body: withActorBody({ title: abdullahBusy.opts.title, priority: 3, alert: true }),
+    }).catch(() => {});
     setAbdullahBusy(null);
     setCreateTaskOpen(false);
   }
 
   async function handleAbdullahBusyCanWait() {
-    if (!abdullahBusy || !getSupabaseClient()) return;
-    const { opts, currentTask } = abdullahBusy;
-    const durationMs = 60 * 60 * 1000;
-    const startTime = currentTask.end_time;
-    const endTime = new Date(new Date(currentTask.end_time).getTime() + durationMs).toISOString();
+    if (!abdullahBusy) return;
+    const { opts } = abdullahBusy;
     try {
-      const newTask = await tasksService.createTask({
-        title: opts.title,
-        assigned_by: role ?? "House",
-        start_time: startTime,
-        end_time: endTime,
-        duration: 60,
-        room: opts.room,
-      });
+      // Schedule the task in the next free slot
       const today = new Date().toISOString().slice(0, 10);
-      const rows = await tasksService.fetchTasks({ date: today });
-      const pending = rows.filter((r) => r.status !== "completed").sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
-      const newIdx = pending.findIndex((r) => r.id === newTask.id);
-      if (newIdx !== -1 && newIdx + 1 < pending.length) {
-        await applyShiftTasksForward(pending, newIdx + 1, durationMs);
-      }
-      await loadTodayTasks();
+      await getApiBase("/api/tasks", {
+        method: "POST",
+        body: withActorBody({ title: opts.title, date: today, timeWindow: "auto", durationMinutes: 60, category: opts.category || "misc" }),
+      });
+      // Also create a waiting urgent task that alerts when Abdullah finishes his current task
+      await getApiBase("/api/urgent_tasks", {
+        method: "POST",
+        body: withActorBody({ title: opts.title, priority: 2, alert_on_free: true }),
+      });
     } catch {
       // ignore
     }
