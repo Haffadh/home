@@ -284,8 +284,8 @@ export default function HouseControlPanel() {
     taskName: string;
     untilTime: string;
     opts: { title: string; category: string; room: string; urgent: boolean; recurring: boolean };
-    currentTask: TaskRow;
-    todayRows: TaskRow[];
+    currentTask: Record<string, unknown>;
+    todayRows: Record<string, unknown>[];
   } | null>(null);
 
   const loadTodayTasks = useCallback(async () => {
