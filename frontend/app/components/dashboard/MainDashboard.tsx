@@ -174,8 +174,8 @@ export default function MainDashboard({
           </section>
         </div>
       ) : (
-        <div className="flex flex-col flex-1 min-h-0 gap-4 p-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 flex-1 min-h-0">
+        <div className="flex flex-col flex-1 min-h-0 gap-3 p-4 md:p-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-5" style={{ flex: "0 1 55vh", minHeight: 0 }}>
             <ScenesCard readOnly={readOnly || !canControlDevices} />
             <UrgentTasksCard canEditTasks={canEditTasks} readOnly={readOnly} />
             <HouseBrainTasksCard readOnly={readOnly} title="Today's Tasks" />
