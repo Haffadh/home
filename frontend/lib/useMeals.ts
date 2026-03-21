@@ -80,30 +80,23 @@ export function useMeals(): {
   useRealtimeTable("meals", load);
 
   const setMealSlot = useCallback(async (slot: MealSlot, entry: MealEntry | null) => {
-    if (!getSupabaseClient()) return;
     try {
-      const today = new Date().toISOString().slice(0, 10);
-      const id = rowsBySlotId[slot];
       if (entry === null) {
-        if (id) await mealsService.deleteMeal(id);
-      } else if (id) {
-        await mealsService.updateMeal(id, {
-          dish: entry.dish || null,
-          drink: entry.drink || null,
-          requested_by: entry.requestedBy,
-          people_count: entry.peopleCount,
-          options: entry.options ?? null,
-          meal_date: today,
-        });
+        // Delete meal - try backend, fall back to Supabase
+        const id = rowsBySlotId[slot];
+        if (id && getSupabaseClient()) await mealsService.deleteMeal(id);
       } else {
-        await mealsService.createMeal({
-          slot,
-          dish: entry.dish || null,
-          drink: entry.drink || null,
-          requested_by: entry.requestedBy,
-          people_count: entry.peopleCount,
-          options: entry.options ?? null,
-          meal_date: today,
+        // Create/update via backend API so WebSocket broadcasts
+        const { getApiBase, withActorBody } = await import("./api");
+        await getApiBase("/api/meals", {
+          method: "POST",
+          body: withActorBody({
+            type: slot,
+            dish: entry.dish || null,
+            drink: entry.drink || null,
+            portions: entry.peopleCount ?? 1,
+            requested_by: entry.requestedBy || null,
+          }),
         });
       }
       await load();
