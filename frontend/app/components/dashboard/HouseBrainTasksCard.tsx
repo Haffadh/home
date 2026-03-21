@@ -286,6 +286,114 @@ function AskAIModal({ taskTitle, onClose }: { taskTitle: string; onClose: () => 
   );
 }
 
+/* ─── Skip Task Modal ─── */
+function SkipTaskModal({ task, onClose, onConfirm }: {
+  task: Task;
+  onClose: () => void;
+  onConfirm: (reschedule: { date: string; time?: string } | null) => void;
+}) {
+  const [step, setStep] = useState<"ask" | "when" | "time">("ask");
+  const [selectedDate, setSelectedDate] = useState("");
+  const [selectedTime, setSelectedTime] = useState("");
+  const today = new Date().toISOString().slice(0, 10);
+  const isToday = selectedDate === today;
+
+  return (
+    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4" role="dialog" aria-modal="true">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-sm rounded-[28px] p-6 animate-modal-in" style={glassModalStyle} onClick={(e) => e.stopPropagation()}>
+
+        {step === "ask" && (
+          <>
+            <h3 className="text-lg font-semibold text-white/95 mb-2">Skip Task</h3>
+            <p className="text-[0.8125rem] text-white/50 mb-5">
+              Should &quot;{task.title}&quot; be reminded at another time?
+            </p>
+            <div className="flex flex-col gap-2">
+              <button type="button" onClick={() => setStep("when")}
+                className="w-full rounded-2xl border border-white/10 bg-[#1e293b]/60 px-4 py-3 text-[0.9375rem] font-medium text-white/90 hover:bg-[#1e293b]/80 transition text-left">
+                Yes, remind me later
+              </button>
+              <button type="button" onClick={() => onConfirm(null)}
+                className="w-full rounded-2xl border border-rose-400/15 bg-rose-500/8 px-4 py-3 text-[0.9375rem] font-medium text-rose-300/80 hover:bg-rose-500/15 transition text-left">
+                No, just skip it
+              </button>
+              <button type="button" onClick={onClose}
+                className="w-full rounded-2xl border border-white/[0.06] px-4 py-2.5 text-[0.8125rem] text-white/40 hover:text-white/60 transition text-center mt-1">
+                Cancel
+              </button>
+            </div>
+          </>
+        )}
+
+        {step === "when" && (
+          <>
+            <h3 className="text-lg font-semibold text-white/95 mb-2">When?</h3>
+            <p className="text-[0.8125rem] text-white/50 mb-4">Pick a day to reschedule this task</p>
+            <div className="space-y-3 mb-5">
+              {/* Quick options */}
+              <div className="grid grid-cols-2 gap-2">
+                <button type="button" onClick={() => { setSelectedDate(today); setStep("time"); }}
+                  className="rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-[0.8125rem] text-white/80 hover:bg-white/10 transition">
+                  Later today
+                </button>
+                <button type="button" onClick={() => {
+                  const tmr = new Date(); tmr.setDate(tmr.getDate() + 1);
+                  setSelectedDate(tmr.toISOString().slice(0, 10)); setStep("time");
+                }}
+                  className="rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-[0.8125rem] text-white/80 hover:bg-white/10 transition">
+                  Tomorrow
+                </button>
+              </div>
+              {/* Date picker */}
+              <div>
+                <label className="block text-[0.625rem] text-white/40 uppercase mb-1">Or pick a date</label>
+                <input type="date" value={selectedDate} min={today}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  className="w-full rounded-xl px-3.5 py-2.5 text-[0.875rem] text-white/95 border border-white/10 bg-[#0f172a]/50 outline-none" />
+              </div>
+              {selectedDate && selectedDate !== today && (
+                <button type="button" onClick={() => setStep("time")}
+                  className="w-full rounded-2xl bg-blue-500/60 hover:bg-blue-500/70 py-2.5 text-[0.8125rem] font-medium text-white transition">
+                  Next
+                </button>
+              )}
+            </div>
+            <button type="button" onClick={() => setStep("ask")}
+              className="text-[0.75rem] text-white/40 hover:text-white/60 transition">← Back</button>
+          </>
+        )}
+
+        {step === "time" && (
+          <>
+            <h3 className="text-lg font-semibold text-white/95 mb-2">
+              {isToday ? "What time today?" : `What time on ${new Date(selectedDate + "T12:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}?`}
+            </h3>
+            {isToday ? (
+              <p className="text-[0.8125rem] text-amber-300/60 mb-4">Time is required for today</p>
+            ) : (
+              <p className="text-[0.8125rem] text-white/40 mb-4">Optional — leave empty to auto-schedule</p>
+            )}
+            <div className="space-y-4 mb-5">
+              <input type="time" value={selectedTime}
+                onChange={(e) => setSelectedTime(e.target.value)}
+                className="w-full rounded-xl px-3.5 py-3 text-[1rem] text-white/95 border border-white/10 bg-[#0f172a]/50 outline-none text-center" />
+              <button type="button"
+                disabled={isToday && !selectedTime}
+                onClick={() => onConfirm({ date: selectedDate, time: selectedTime || undefined })}
+                className="w-full rounded-2xl bg-emerald-600/60 hover:bg-emerald-500/60 py-3 text-[0.9375rem] font-medium text-white transition disabled:opacity-40">
+                Reschedule
+              </button>
+            </div>
+            <button type="button" onClick={() => setStep("when")}
+              className="text-[0.75rem] text-white/40 hover:text-white/60 transition">← Back</button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ─── Main card ─── */
 export default function HouseBrainTasksCard({
   readOnly = false, roomFilter, urgentOnly = false, title = "Today's Tasks",
@@ -311,6 +419,7 @@ export default function HouseBrainTasksCard({
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [editTask, setEditTask] = useState<Task | null>(null);
   const [askAITitle, setAskAITitle] = useState<string | null>(null);
+  const [skipTask, setSkipTask] = useState<Task | null>(null);
 
   // Long press
   const [isLongPress, setIsLongPress] = useState(false);
@@ -427,9 +536,30 @@ export default function HouseBrainTasksCard({
     } catch { /* ignore */ }
   }
 
-  async function handleSkip(task: Task) {
-    // Skip = delete for now (same as DailyTasksCard "leave_empty")
-    await handleDelete(task);
+  function handleSkip(task: Task) {
+    setSkipTask(task);
+  }
+
+  async function handleSkipConfirm(task: Task, reschedule: { date: string; time?: string } | null) {
+    if (!reschedule) {
+      // Skip without rescheduling — just delete
+      await handleDelete(task);
+    } else {
+      // Reschedule: update the task with new date/time
+      const body: Record<string, unknown> = { date: reschedule.date };
+      if (reschedule.time) {
+        body.startTime = `${reschedule.date}T${reschedule.time}:00`;
+        body.endTime = new Date(new Date(body.startTime as string).getTime() + task.durationMinutes * 60000).toISOString();
+      } else {
+        // No time specified (different day) — auto-schedule
+        body.timeWindow = "auto";
+      }
+      try {
+        await getApiBase(`/api/tasks/${task.id}`, { method: "PATCH", body });
+        await loadTasks();
+      } catch { /* ignore */ }
+    }
+    setSkipTask(null);
   }
 
   async function handleEditSave(task: Task, payload: { title: string; category: string; durationMinutes: number }) {
@@ -618,6 +748,13 @@ export default function HouseBrainTasksCard({
       {/* Ask AI modal */}
       {askAITitle && (
         <AskAIModal taskTitle={askAITitle} onClose={() => setAskAITitle(null)} />
+      )}
+      {/* Skip task modal */}
+      {skipTask && (
+        <SkipTaskModal task={skipTask}
+          onClose={() => setSkipTask(null)}
+          onConfirm={(reschedule) => handleSkipConfirm(skipTask, reschedule)}
+        />
       )}
     </GlassCard>
   );
