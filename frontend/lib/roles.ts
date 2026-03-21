@@ -51,6 +51,23 @@ export const ROLE_LABELS: Record<Role, string> = {
 
 /** Display name for login buttons */
 export const LOGIN_LABELS: Record<Role, string> = {
+  moeen: "Moeen",
+  samya: "Samya",
+  nawaf: "Nawaf",
+  ahmed: "Ahmed",
+  mariam: "Mariam",
+  abdullah: "Abdullah",
+  kitchen: "Kitchen",
+  living_room: "Living Room",
+  dining_room: "Dining Room",
+  master_bedroom: "Master Bedroom",
+  winklevi_room: "Winklevi Room",
+  mariam_room: "Mariam Room",
+  admin: "Admin",
+};
+
+/** Password for each role: Name#1 (first word capitalized) */
+export const ROLE_PASSWORDS: Record<Role, string> = {
   moeen: "Moeen#1",
   samya: "Samya#1",
   nawaf: "Nawaf#1",
@@ -63,7 +80,7 @@ export const LOGIN_LABELS: Record<Role, string> = {
   master_bedroom: "Master#1",
   winklevi_room: "Winklevi#1",
   mariam_room: "Mariam#1",
-  admin: "Admin",
+  admin: "Admin#1",
 };
 
 /** Human name for the actor (used in tasks, meals, etc.) */

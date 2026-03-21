@@ -3,106 +3,95 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Role } from "@/lib/roles";
-import { USER_ROLES, ROOM_ROLES, LOGIN_LABELS, ROLE_DEFAULT_ROUTE, STORAGE_KEY, ACTOR_NAME } from "@/lib/roles";
+import { USER_ROLES, ROOM_ROLES, LOGIN_LABELS, ROLE_PASSWORDS, ROLE_DEFAULT_ROUTE, STORAGE_KEY, ACTOR_NAME } from "@/lib/roles";
 import { getBaseUrl } from "@/lib/api";
-
-const ADMIN_PASSCODE = "3866";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [step, setStep] = useState<"choose" | "users" | "rooms">("choose");
-  const [tapCount, setTapCount] = useState(0);
-  const [adminPrompt, setAdminPrompt] = useState(false);
-  const [code, setCode] = useState("");
+  const [step, setStep] = useState<"choose" | "users" | "rooms" | "password">("choose");
+  const [selectedRole, setSelectedRole] = useState<Role | null>(null);
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState(false);
 
-  async function selectRole(role: Role) {
+  function handleSelect(role: Role) {
+    setSelectedRole(role);
+    setPassword("");
+    setError(false);
+    setStep("password");
+  }
+
+  async function handlePasswordSubmit() {
+    if (!selectedRole) return;
+    const correct = ROLE_PASSWORDS[selectedRole];
+    if (password !== correct) {
+      setError(true);
+      return;
+    }
+    // Login
     if (typeof window !== "undefined") {
-      localStorage.setItem(STORAGE_KEY, role);
-      localStorage.setItem("shh_actor_name", ACTOR_NAME[role] || role);
+      localStorage.setItem(STORAGE_KEY, selectedRole);
+      localStorage.setItem("shh_actor_name", ACTOR_NAME[selectedRole] || selectedRole);
     }
     try {
       const res = await fetch(`${getBaseUrl()}/auth/role-login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role }),
+        body: JSON.stringify({ role: selectedRole }),
       });
       const data = await res.json();
-      if (data.accessToken) {
-        localStorage.setItem("token", data.accessToken);
-      }
-    } catch {
-      // Proceed without token
-    }
-    router.push(ROLE_DEFAULT_ROUTE[role]);
+      if (data.accessToken) localStorage.setItem("token", data.accessToken);
+    } catch { /* proceed */ }
+    router.push(ROLE_DEFAULT_ROUTE[selectedRole]);
   }
 
-  function handleHeaderClick() {
-    setTapCount((c) => {
-      const next = c + 1;
-      if (next >= 3) { setAdminPrompt(true); return 0; }
-      return next;
-    });
-  }
-
-  async function handleUnlock() {
-    if (code === ADMIN_PASSCODE) {
-      await selectRole("admin");
-      setAdminPrompt(false);
-      setCode("");
+  function goBack() {
+    if (step === "password") {
+      // Go back to the list they came from
+      const isUser = selectedRole && USER_ROLES.includes(selectedRole);
+      setStep(isUser ? "users" : "rooms");
+      setSelectedRole(null);
+      setPassword("");
+      setError(false);
+    } else {
+      setStep("choose");
     }
   }
 
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] px-4">
-      <h1
-        className="text-2xl font-bold text-white/90 tracking-tight mb-2 cursor-default select-none"
-        onClick={handleHeaderClick}
-      >
+      <h1 className="text-2xl font-bold text-white/90 tracking-tight mb-2 cursor-default select-none">
         Haffadh Home
       </h1>
 
-      {step === "choose" ? (
+      {step === "choose" && (
         <>
           <p className="text-[0.9375rem] text-white/50 mb-8">Who&apos;s logging in?</p>
           <div className="flex flex-col gap-3 w-full max-w-xs">
-            <button
-              type="button"
-              onClick={() => setStep("users")}
-              className="w-full rounded-3xl border border-white/10 bg-[#0f172a]/70 px-5 py-4 text-[1rem] font-medium text-white/90 transition-all duration-300 ease-out hover:bg-[#0f172a]/80 hover:scale-[1.02] active:scale-[0.97] flex items-center justify-between"
-            >
+            <button type="button" onClick={() => setStep("users")}
+              className="w-full rounded-3xl border border-white/10 bg-[#0f172a]/70 px-5 py-4 text-[1rem] font-medium text-white/90 transition-all duration-300 ease-out hover:bg-[#0f172a]/80 hover:scale-[1.02] active:scale-[0.97] flex items-center justify-between">
               <span>Family Members</span>
               <span className="text-white/30">→</span>
             </button>
-            <button
-              type="button"
-              onClick={() => setStep("rooms")}
-              className="w-full rounded-3xl border border-white/10 bg-[#0f172a]/70 px-5 py-4 text-[1rem] font-medium text-white/90 transition-all duration-300 ease-out hover:bg-[#0f172a]/80 hover:scale-[1.02] active:scale-[0.97] flex items-center justify-between"
-            >
+            <button type="button" onClick={() => setStep("rooms")}
+              className="w-full rounded-3xl border border-white/10 bg-[#0f172a]/70 px-5 py-4 text-[1rem] font-medium text-white/90 transition-all duration-300 ease-out hover:bg-[#0f172a]/80 hover:scale-[1.02] active:scale-[0.97] flex items-center justify-between">
               <span>Room Panels</span>
               <span className="text-white/30">→</span>
             </button>
           </div>
         </>
-      ) : (
+      )}
+
+      {(step === "users" || step === "rooms") && (
         <>
-          <button
-            type="button"
-            onClick={() => setStep("choose")}
-            className="text-[0.8125rem] text-white/40 hover:text-white/70 transition mb-6"
-          >
-            ← Back
-          </button>
+          <button type="button" onClick={goBack}
+            className="text-[0.8125rem] text-white/40 hover:text-white/70 transition mb-6">← Back</button>
           <p className="text-[0.9375rem] text-white/50 mb-6">
             {step === "users" ? "Select your name" : "Select a room"}
           </p>
           <div className="flex flex-col gap-3 w-full max-w-xs">
             {(step === "users" ? USER_ROLES : ROOM_ROLES).map((role) => (
-              <button
-                key={role}
-                type="button"
-                onClick={() => selectRole(role)}
-                className="w-full rounded-3xl border border-white/10 bg-[#0f172a]/70 px-5 py-3.5 text-[1rem] font-medium text-white/90 transition-all duration-300 ease-out hover:bg-[#0f172a]/80 hover:scale-[1.02] active:scale-[0.97]"
-              >
+              <button key={role} type="button" onClick={() => handleSelect(role)}
+                className="w-full rounded-3xl border border-white/10 bg-[#0f172a]/70 px-5 py-3.5 text-[1rem] font-medium text-white/90 transition-all duration-300 ease-out hover:bg-[#0f172a]/80 hover:scale-[1.02] active:scale-[0.97]">
                 {LOGIN_LABELS[role]}
               </button>
             ))}
@@ -110,26 +99,32 @@ export default function LoginPage() {
         </>
       )}
 
-      {adminPrompt && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/50 z-50">
-          <div className="bg-slate-900 p-6 rounded-2xl w-80 border border-white/10">
-            <h2 className="text-lg text-white font-semibold mb-4">Enter Passcode</h2>
+      {step === "password" && selectedRole && (
+        <>
+          <button type="button" onClick={goBack}
+            className="text-[0.8125rem] text-white/40 hover:text-white/70 transition mb-6">← Back</button>
+          <p className="text-[1.125rem] font-medium text-white/80 mb-1">{LOGIN_LABELS[selectedRole]}</p>
+          <p className="text-[0.8125rem] text-white/40 mb-6">Enter password</p>
+          <form onSubmit={(e) => { e.preventDefault(); handlePasswordSubmit(); }} className="w-full max-w-xs space-y-3">
             <input
               type="password"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              className="w-full text-center text-xl mb-4 rounded-xl bg-[#0f172a]/70 border border-white/10 px-3 py-2 text-white"
-              placeholder="••••"
+              value={password}
+              onChange={(e) => { setPassword(e.target.value); setError(false); }}
+              placeholder="••••••"
               autoFocus
+              className={`w-full text-center text-xl rounded-2xl border px-4 py-3 text-white/90 bg-[#0f172a]/70 outline-none transition ${
+                error ? "border-rose-400/50 bg-rose-500/5" : "border-white/10 focus:border-white/20"
+              }`}
             />
-            <div className="flex gap-2">
-              <button type="button" onClick={() => { setAdminPrompt(false); setCode(""); }}
-                className="flex-1 rounded-xl border border-white/10 py-2 text-white/80">Cancel</button>
-              <button type="button" onClick={handleUnlock}
-                className="flex-1 bg-blue-500 rounded-xl py-2 text-white font-medium">Unlock</button>
-            </div>
-          </div>
-        </div>
+            {error && (
+              <p className="text-[0.8125rem] text-rose-400/80 text-center">Incorrect password</p>
+            )}
+            <button type="submit"
+              className="w-full rounded-2xl bg-blue-500/80 hover:bg-blue-500 py-3 text-[1rem] font-medium text-white transition">
+              Login
+            </button>
+          </form>
+        </>
       )}
     </div>
   );
