@@ -22,7 +22,6 @@ import {
   LUNCH_ITEMS,
   DINNER_ITEMS,
   DRINK_OPTIONS,
-  MEAL_REQUESTED_BY,
 } from "../../../data/menu";
 import type { MealEntry } from "../../../types/houseBrain";
 
@@ -35,10 +34,15 @@ function useMenuItems() {
   ];
 }
 
+function getActorName(): string {
+  if (typeof window === "undefined") return "Family";
+  return localStorage.getItem("shh_actor_name") || "Family";
+}
+
 const emptyMealEntry = (): MealEntry => ({
   dish: "",
   drink: "",
-  requestedBy: "Baba",
+  requestedBy: (getActorName() as MealEntry["requestedBy"]),
   peopleCount: 1,
 });
 
@@ -153,18 +157,7 @@ function MealSelectorModal({
               ))}
             </select>
           </div>
-          <div>
-            <label className="block text-xs text-white/50 mb-1">Assigned person</label>
-            <select
-              value={local.requestedBy}
-              onChange={(e) => setLocal({ ...local, requestedBy: e.target.value as MealEntry["requestedBy"] })}
-              className="w-full rounded-xl px-3.5 py-2.5 text-sm text-white/95 border border-white/10 bg-slate-800/80"
-            >
-              {MEAL_REQUESTED_BY.map((r) => (
-                <option key={r} value={r}>{r}</option>
-              ))}
-            </select>
-          </div>
+          {/* Person auto-set from login */}
           <div>
             <label className="block text-xs text-white/50 mb-1">Portion size (people)</label>
             <PortionDropdown
@@ -386,7 +379,7 @@ export default function HouseControlPanel() {
     if (!t) return;
     if (getSupabaseClient()) {
       try {
-        await groceriesService.addGrocery({ title: t, requested_by: "House" });
+        await groceriesService.addGrocery({ title: t, requested_by: getActorName() });
         setGroceryInput("");
       } catch {
         // ignore
