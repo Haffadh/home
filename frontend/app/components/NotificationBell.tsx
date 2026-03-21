@@ -66,10 +66,10 @@ export default function NotificationBell() {
           e.stopPropagation();
           setOpen((o) => !o);
         }}
-        className="relative w-10 h-10 rounded-2xl flex items-center justify-center bg-[#0f172a]/70 hover:bg-[#0f172a]/80 border border-white/10 transition"
+        className="relative w-14 h-14 rounded-2xl flex items-center justify-center bg-[#0f172a]/70 hover:bg-[#0f172a]/80 border border-white/10 transition"
         aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"}
       >
-        <span className="text-lg" aria-hidden>🔔</span>
+        <span className="text-2xl" aria-hidden>🔔</span>
         {unreadCount > 0 && (
           <span className="absolute -top-0.5 -right-0.5 min-w-[1.25rem] h-5 px-1 rounded-full bg-amber-500 text-[0.6875rem] font-bold text-white flex items-center justify-center">
             {unreadCount > 99 ? "99+" : unreadCount}

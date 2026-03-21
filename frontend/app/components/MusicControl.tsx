@@ -71,17 +71,14 @@ export default function MusicControl() {
       <button
         type="button"
         onClick={() => setShowPanel((v) => !v)}
-        className={`flex items-center gap-1.5 rounded-2xl px-2.5 py-1.5 transition border ${
+        className={`w-14 h-14 rounded-2xl flex items-center justify-center transition border ${
           isPlaying
             ? "bg-violet-500/15 border-violet-400/20 text-violet-300"
             : "bg-[#0f172a]/70 border-white/10 text-white/60 hover:text-white/80"
         }`}
         title={currentTrack ? currentTrack.title : "Music"}
       >
-        <span className="text-sm">{isPlaying ? "♫" : "♪"}</span>
-        {isPlaying && currentTrack && (
-          <span className="text-[0.625rem] max-w-[5rem] truncate hidden sm:inline">{currentTrack.title}</span>
-        )}
+        <span className="text-2xl">{isPlaying ? "♫" : "♪"}</span>
       </button>
 
       {/* Dropdown */}
