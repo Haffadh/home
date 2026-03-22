@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import GlassCard from "./GlassCard";
 import { getApiBase, withActorBody } from "../../../lib/api";
 import { useRealtimeEvent } from "../../context/RealtimeContext";
@@ -37,10 +37,29 @@ export default function MealsCard({ readOnly = false }: MealsCardProps = {}) {
     dinner: null,
   });
   const [suggestions, setSuggestions] = useState<Record<MealSlot, MealSuggestionResult | null>>({ breakfast: null, lunch: null, dinner: null });
-  const [expanded, setExpanded] = useState<MealSlot | null>(null);
+  const [modalSlot, setModalSlot] = useState<MealSlot | null>(null);
   const [accepting, setAccepting] = useState(false);
-  const [showPicker, setShowPicker] = useState<MealSlot | null>(null);
+  const [showPicker, setShowPicker] = useState(false);
   const [pickerSearch, setPickerSearch] = useState("");
+  // Long press
+  const pressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [isLongPress, setIsLongPress] = useState(false);
+
+  function handlePressStart(slot: MealSlot) {
+    setIsLongPress(false);
+    if (pressTimerRef.current) clearTimeout(pressTimerRef.current);
+    pressTimerRef.current = setTimeout(() => {
+      setIsLongPress(true);
+      setModalSlot(slot);
+      setShowPicker(false);
+      setPickerSearch("");
+      pressTimerRef.current = null;
+    }, 500);
+  }
+  function handlePressEnd() {
+    if (pressTimerRef.current) { clearTimeout(pressTimerRef.current); pressTimerRef.current = null; }
+  }
+  useEffect(() => { return () => { if (pressTimerRef.current) clearTimeout(pressTimerRef.current); }; }, []);
 
   const loadMeals = useCallback(async () => {
     try {
@@ -115,9 +134,9 @@ export default function MealsCard({ readOnly = false }: MealsCardProps = {}) {
         method: "POST",
         body: withActorBody({ type: slot, dish, portions: 2 }),
       });
-      setShowPicker(null);
+      setShowPicker(false);
       setPickerSearch("");
-      setExpanded(null);
+      setModalSlot(null);
       await loadMeals();
     } catch { /* ignore */ }
     finally { setAccepting(false); }
@@ -131,14 +150,18 @@ export default function MealsCard({ readOnly = false }: MealsCardProps = {}) {
           {SECTIONS.map(({ key, label }) => {
             const meal = meals[key];
             const suggestion = !meal ? getSuggestionForSlot(key) : null;
-            const isExpanded = expanded === key;
             const hasMeal = meal && meal.dish;
 
             return (
               <div key={key}>
                 <button
                   type="button"
-                  onClick={() => setExpanded(isExpanded ? null : key)}
+                  onMouseDown={() => handlePressStart(key)}
+                  onMouseUp={handlePressEnd}
+                  onMouseLeave={handlePressEnd}
+                  onTouchStart={() => handlePressStart(key)}
+                  onTouchEnd={handlePressEnd}
+                  onContextMenu={(e) => e.preventDefault()}
                   className="w-full text-left relative rounded-3xl border border-white/[0.06] p-5 backdrop-blur-xl transition-all duration-300 ease-out hover:-translate-y-1 hover:scale-[1.01]"
                   style={{
                     background: suggestion
@@ -175,91 +198,119 @@ export default function MealsCard({ readOnly = false }: MealsCardProps = {}) {
                     <p className="text-[0.8125rem] text-white/30 italic">Waiting for suggestions…</p>
                   )}
                 </button>
-
-                {/* Expanded detail panel */}
-                {isExpanded && (
-                  <div
-                    className="mt-2 rounded-2xl border border-white/[0.06] p-4 backdrop-blur-xl space-y-3"
-                    style={{
-                      background: "linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%)",
-                    }}
-                  >
-                    {showPicker === key ? (
-                      /* ─── Meal picker ─── */
-                      <div className="space-y-2">
-                        <input type="text" value={pickerSearch} onChange={(e) => setPickerSearch(e.target.value)}
-                          placeholder="Search menu…" autoFocus
-                          className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-[0.8125rem] text-white/90 placeholder:text-white/25 outline-none" />
-                        <div className="max-h-36 overflow-y-auto space-y-1 no-scrollbar">
-                          {MENU_BY_SLOT[key]
-                            .filter((d) => !pickerSearch || d.toLowerCase().includes(pickerSearch.toLowerCase()))
-                            .map((dish) => (
-                              <button key={dish} type="button" onClick={() => chooseDish(key, dish)} disabled={accepting}
-                                className="w-full text-left rounded-lg px-3 py-1.5 text-[0.8125rem] text-white/80 hover:bg-white/10 transition truncate">
-                                {dish}
-                              </button>
-                            ))}
-                        </div>
-                        <button type="button" onClick={() => { setShowPicker(null); setPickerSearch(""); }}
-                          className="text-[0.75rem] text-white/40 hover:text-white/60">Cancel</button>
-                      </div>
-                    ) : hasMeal ? (
-                      <>
-                        <p className="text-[0.9375rem] font-medium text-white/95">{meal.dish}</p>
-                        {meal.drink && (
-                          <p className="text-[0.8125rem] text-white/60">Drink: {meal.drink}</p>
-                        )}
-                        <p className="text-[0.8125rem] text-white/50">
-                          {meal.requested_by
-                            ? `Chosen by ${meal.requested_by}`
-                            : "Set by family"}{" "}
-                          · {meal.portions} pax
-                        </p>
-                        {!readOnly && (
-                          <button type="button" onClick={() => setShowPicker(key)}
-                            className="rounded-xl bg-white/10 hover:bg-white/15 px-3 py-1.5 text-[0.75rem] text-white/60 transition">
-                            Change
-                          </button>
-                        )}
-                      </>
-                    ) : suggestion ? (
-                      <>
-                        <p className="text-[0.9375rem] font-medium text-violet-200/90">
-                          {suggestion.meal}
-                        </p>
-                        <p className="text-[0.8125rem] text-white/50">{suggestion.reason}</p>
-                        {suggestion.missingIngredients.length > 0 && (
-                          <p className="text-[0.75rem] text-white/40">
-                            Missing: {suggestion.missingIngredients.join(", ")}
-                          </p>
-                        )}
-                        {!readOnly && (
-                          <div className="flex gap-2">
-                            <button type="button"
-                              onClick={(e) => { e.stopPropagation(); acceptSuggestion(key, suggestion); }}
-                              disabled={accepting}
-                              className="rounded-xl bg-violet-600/60 hover:bg-violet-500/60 disabled:opacity-50 px-4 py-2 text-[0.8125rem] font-medium text-white transition">
-                              {accepting ? "…" : "Accept"}
-                            </button>
-                            <button type="button" onClick={() => setShowPicker(key)}
-                              className="rounded-xl bg-white/10 hover:bg-white/15 px-4 py-2 text-[0.8125rem] text-white/60 transition">
-                              Choose other
-                            </button>
-                          </div>
-                        )}
-                      </>
-                    ) : (
-                      <p className="text-[0.8125rem] text-white/30 italic">
-                        Waiting for suggestions…
-                      </p>
-                    )}
-                  </div>
-                )}
               </div>
             );
           })}
         </div>
       </div>
+
+      {/* Long-press meal detail modal */}
+      {modalSlot && (() => {
+        const meal = meals[modalSlot];
+        const suggestion = !meal ? getSuggestionForSlot(modalSlot) : null;
+        const hasMeal = meal && meal.dish;
+        const label = SECTIONS.find((s) => s.key === modalSlot)?.label ?? modalSlot;
+
+        return (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" role="dialog" aria-modal="true">
+            <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => { setModalSlot(null); setShowPicker(false); setPickerSearch(""); }} />
+            <div className="relative w-full max-w-sm max-h-[80vh] flex flex-col rounded-[28px] p-6 animate-modal-in"
+              style={{ background: "rgba(18,24,38,0.95)", backdropFilter: "blur(24px)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: "28px", boxShadow: "0 25px 50px -12px rgba(0,0,0,0.5)" }}
+              onClick={(e) => e.stopPropagation()}>
+
+              <p className="text-[0.625rem] text-white/40 uppercase tracking-wider mb-1">{label}</p>
+
+              {showPicker ? (
+                <div className="flex-1 min-h-0 flex flex-col gap-3">
+                  <h3 className="text-lg font-semibold text-white/95">Choose a dish</h3>
+                  <input type="text" value={pickerSearch} onChange={(e) => setPickerSearch(e.target.value)}
+                    placeholder="Search menu…" autoFocus
+                    className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-[0.875rem] text-white/90 placeholder:text-white/25 outline-none" />
+                  <div className="flex-1 min-h-0 overflow-y-auto space-y-1">
+                    {MENU_BY_SLOT[modalSlot]
+                      .filter((d) => !pickerSearch || d.toLowerCase().includes(pickerSearch.toLowerCase()))
+                      .map((dish) => (
+                        <button key={dish} type="button" onClick={() => chooseDish(modalSlot, dish)} disabled={accepting}
+                          className="w-full text-left rounded-xl px-3.5 py-2.5 text-[0.875rem] text-white/80 hover:bg-white/10 transition truncate">
+                          {dish}
+                        </button>
+                      ))}
+                  </div>
+                  <button type="button" onClick={() => { setShowPicker(false); setPickerSearch(""); }}
+                    className="shrink-0 w-full rounded-2xl border border-white/10 bg-[#0f172a]/70 py-2.5 text-[0.8125rem] text-white/60 transition">
+                    Back
+                  </button>
+                </div>
+              ) : hasMeal ? (
+                <div className="space-y-4">
+                  <h3 className="text-xl font-semibold text-white/95">{meal.dish}</h3>
+                  {meal.drink && <p className="text-[0.875rem] text-white/60">Drink: {meal.drink}</p>}
+                  <p className="text-[0.875rem] text-white/50">
+                    {meal.requested_by ? `Chosen by ${meal.requested_by}` : "Set by family"} · {meal.portions} pax
+                  </p>
+                  <div className="flex gap-2 pt-2">
+                    {!readOnly && (
+                      <button type="button" onClick={() => setShowPicker(true)}
+                        className="flex-1 rounded-2xl border border-white/10 bg-[#1e293b]/60 py-2.5 text-[0.8125rem] font-medium text-white/90 hover:bg-[#1e293b]/80 transition">
+                        Change
+                      </button>
+                    )}
+                    <button type="button" onClick={() => setModalSlot(null)}
+                      className="flex-1 rounded-2xl border border-white/10 bg-[#0f172a]/70 py-2.5 text-[0.8125rem] text-white/60 transition">
+                      Close
+                    </button>
+                  </div>
+                </div>
+              ) : suggestion ? (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <span className="ai-sparkle text-violet-300/80">&#10024;</span>
+                    <h3 className="text-xl font-semibold text-violet-200/90">{suggestion.meal}</h3>
+                  </div>
+                  <p className="text-[0.875rem] text-white/50">{suggestion.reason}</p>
+                  {suggestion.missingIngredients.length > 0 && (
+                    <p className="text-[0.8125rem] text-white/40">Missing: {suggestion.missingIngredients.join(", ")}</p>
+                  )}
+                  <div className="flex gap-2 pt-2">
+                    {!readOnly && (
+                      <>
+                        <button type="button"
+                          onClick={() => { acceptSuggestion(modalSlot, suggestion); setModalSlot(null); }}
+                          disabled={accepting}
+                          className="flex-1 rounded-2xl bg-violet-600/60 hover:bg-violet-500/60 disabled:opacity-50 py-2.5 text-[0.8125rem] font-medium text-white transition">
+                          {accepting ? "…" : "Accept"}
+                        </button>
+                        <button type="button" onClick={() => setShowPicker(true)}
+                          className="flex-1 rounded-2xl border border-white/10 bg-[#1e293b]/60 py-2.5 text-[0.8125rem] text-white/80 transition">
+                          Choose other
+                        </button>
+                      </>
+                    )}
+                    <button type="button" onClick={() => setModalSlot(null)}
+                      className={`${readOnly ? "flex-1" : ""} rounded-2xl border border-white/10 bg-[#0f172a]/70 py-2.5 px-4 text-[0.8125rem] text-white/60 transition`}>
+                      Close
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <p className="text-[0.875rem] text-white/40">No meal set and no suggestions available.</p>
+                  {!readOnly && (
+                    <button type="button" onClick={() => setShowPicker(true)}
+                      className="w-full rounded-2xl border border-white/10 bg-[#1e293b]/60 py-2.5 text-[0.8125rem] text-white/80 transition">
+                      Choose a dish
+                    </button>
+                  )}
+                  <button type="button" onClick={() => setModalSlot(null)}
+                    className="w-full rounded-2xl border border-white/10 bg-[#0f172a]/70 py-2.5 text-[0.8125rem] text-white/60 transition">
+                    Close
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
     </GlassCard>
   );
 }
