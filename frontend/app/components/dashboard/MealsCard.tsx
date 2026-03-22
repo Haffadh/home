@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import GlassCard from "./GlassCard";
 import { getApiBase, withActorBody } from "../../../lib/api";
 import { useRealtimeEvent } from "../../context/RealtimeContext";
@@ -204,15 +205,15 @@ export default function MealsCard({ readOnly = false }: MealsCardProps = {}) {
         </div>
       </div>
 
-      {/* Long-press meal detail modal */}
-      {modalSlot && (() => {
+      {/* Long-press meal detail modal — portal to body so overflow-hidden parents don't clip */}
+      {modalSlot && typeof document !== "undefined" && createPortal((() => {
         const meal = meals[modalSlot];
         const suggestion = !meal ? getSuggestionForSlot(modalSlot) : null;
         const hasMeal = meal && meal.dish;
         const label = SECTIONS.find((s) => s.key === modalSlot)?.label ?? modalSlot;
 
         return (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" role="dialog" aria-modal="true">
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6" role="dialog" aria-modal="true">
             <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => { setModalSlot(null); setShowPicker(false); setPickerSearch(""); }} />
             <div className="relative w-full max-w-sm max-h-[70vh] flex flex-col rounded-[28px] p-6 animate-modal-in overflow-y-auto"
               style={{ background: "rgba(18,24,38,0.95)", backdropFilter: "blur(24px)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: "28px", boxShadow: "0 25px 50px -12px rgba(0,0,0,0.5)" }}
@@ -310,7 +311,7 @@ export default function MealsCard({ readOnly = false }: MealsCardProps = {}) {
             </div>
           </div>
         );
-      })()}
+      })(), document.body)}
     </GlassCard>
   );
 }
