@@ -86,18 +86,72 @@ export const ITEMS_WITH_PROMPTS: Record<string, { label: string; fields: string[
   },
 };
 
-/** Dishes with sub-options — ambiguous names that need clarification */
-export const DISH_SUB_OPTIONS: Record<string, { question: string; options: string[] }[]> = {
+/** Sub-options for ambiguous dishes.
+ *  `showOnCard: true` → the choice appears on the main card (e.g. side dish)
+ *  `showOnCard: false` → only shown in long-press detail (e.g. cooking style)
+ */
+export type DishSubOption = { question: string; options: string[]; showOnCard: boolean };
+
+export const DISH_SUB_OPTIONS: Record<string, DishSubOption[]> = {
   Eggs: [
-    { question: "How would you like them?", options: ["Omelette", "Scrambled", "Fried", "Boiled", "Poached"] },
-    { question: "How done?", options: ["Runny", "Medium", "Well done"] },
+    { question: "How would you like them?", options: ["Omelette", "Scrambled", "Fried", "Boiled", "Poached"], showOnCard: false },
+    { question: "How done?", options: ["Runny", "Medium", "Well done"], showOnCard: false },
   ],
   Salmon: [
-    { question: "How would you like it?", options: ["Grilled", "Baked", "Pan-seared", "Poached", "Raw (Sashimi)"] },
-    { question: "How done?", options: ["Medium rare", "Medium", "Well done"] },
+    { question: "How would you like it?", options: ["Grilled", "Baked", "Pan-seared", "Poached"], showOnCard: false },
+    { question: "How done?", options: ["Medium rare", "Medium", "Well done"], showOnCard: false },
+    { question: "Side?", options: ["Rice", "Mashed potatoes", "Salad", "Vegetables"], showOnCard: true },
+  ],
+  "Cajun Shrimp": [
+    { question: "Side?", options: ["Rice", "Pasta", "Bread", "Salad"], showOnCard: true },
+  ],
+  "Supreme Fish": [
+    { question: "Side?", options: ["Rice", "Mashed potatoes", "Salad", "Fries"], showOnCard: true },
+  ],
+  "Charcoal Chicken": [
+    { question: "Side?", options: ["Rice", "Bread", "Fries", "Hummus & pickles"], showOnCard: true },
+  ],
+  "Kofta with Hummus": [
+    { question: "Side?", options: ["Rice", "Bread", "Salad"], showOnCard: true },
+  ],
+  "Kufta Kebab": [
+    { question: "Side?", options: ["Rice", "Bread", "Hummus", "Salad"], showOnCard: true },
+  ],
+  "Chicken Makhani": [
+    { question: "Side?", options: ["Rice", "Naan bread", "Roti"], showOnCard: true },
+  ],
+  "Shrimp Dopiyaza": [
+    { question: "Side?", options: ["Rice", "Naan bread", "Roti"], showOnCard: true },
+  ],
+  "Chicken Dopiyaza": [
+    { question: "Side?", options: ["Rice", "Naan bread", "Roti"], showOnCard: true },
+  ],
+  "Chinese Chicken": [
+    { question: "Side?", options: ["Rice", "Noodles", "Fried rice"], showOnCard: true },
+  ],
+  "Chinese Cream Shrimp": [
+    { question: "Side?", options: ["Rice", "Noodles", "Fried rice"], showOnCard: true },
+  ],
+  Dahl: [
+    { question: "Side?", options: ["Rice", "Naan bread", "Roti"], showOnCard: true },
+  ],
+  "Halloumi in Tomato Sauce": [
+    { question: "Side?", options: ["Rice", "Bread", "Salad"], showOnCard: true },
+  ],
+  "Khoresh Sabzi": [
+    { question: "Side?", options: ["Rice", "Bread"], showOnCard: true },
+  ],
+  "Beef Bamiya": [
+    { question: "Side?", options: ["Rice", "Bread"], showOnCard: true },
+  ],
+  "Minced Meat with Vegetables": [
+    { question: "Side?", options: ["Rice", "Bread", "Mashed potatoes"], showOnCard: true },
+  ],
+  Chickpeas: [
+    { question: "Side?", options: ["Rice", "Bread", "Plain"], showOnCard: true },
   ],
   Yogurt: [
-    { question: "Any toppings?", options: ["Plain", "Honey & granola", "Fruits", "Nuts & seeds"] },
+    { question: "Any toppings?", options: ["Plain", "Honey & granola", "Fruits", "Nuts & seeds"], showOnCard: true },
   ],
 };
 

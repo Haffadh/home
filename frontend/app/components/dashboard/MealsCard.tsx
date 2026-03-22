@@ -125,8 +125,17 @@ export default function MealsCard({ readOnly = false }: MealsCardProps = {}) {
     if (newChoices.length < subs.length) {
       setSubOptions({ ...subOptions, step: subOptions.step + 1, choices: newChoices });
     } else {
-      // All questions answered — create the dish with preferences
-      const dishName = `${subOptions.dish} (${newChoices.join(", ")})`;
+      // Separate card-visible choices (sides) from detail-only choices (cooking style)
+      const cardParts: string[] = [];
+      const detailParts: string[] = [];
+      subs.forEach((s, i) => {
+        if (s.showOnCard) cardParts.push(newChoices[i]);
+        else detailParts.push(newChoices[i]);
+      });
+      // Dish name: "Salmon · with Rice" or "Eggs (Scrambled, Medium)"
+      let dishName = subOptions.dish;
+      if (cardParts.length > 0) dishName += ` · with ${cardParts.join(", ")}`;
+      if (detailParts.length > 0) dishName += ` (${detailParts.join(", ")})`;
       chooseDish(modalSlot, dishName);
       setSubOptions(null);
     }
@@ -257,7 +266,7 @@ export default function MealsCard({ readOnly = false }: MealsCardProps = {}) {
                   </p>
                   {hasMeal ? (
                     <div className="text-[0.8125rem] text-white/80 space-y-0.5">
-                      <p className="font-medium text-white/95">{meal.dish}</p>
+                      <p className="font-medium text-white/95">{(meal.dish ?? "").replace(/\s*\([^)]*\)\s*$/, "")}</p>
                       {meal.drink && <p className="text-white/60">Drink: {meal.drink}</p>}
                     </div>
                   ) : suggestion ? (
