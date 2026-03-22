@@ -132,7 +132,7 @@ export default function MealsCard({ readOnly = false }: MealsCardProps = {}) {
         if (s.showOnCard) cardParts.push(newChoices[i]);
         else detailParts.push(newChoices[i]);
       });
-      // Dish name: "Salmon · with Rice" or "Eggs (Scrambled, Medium)"
+      // Dish name: "Salmon · Rice" or "Eggs (Scrambled, Medium)"
       let dishName = subOptions.dish;
       if (cardParts.length > 0) dishName += ` · ${cardParts.join(", ")}`;
       if (detailParts.length > 0) dishName += ` (${detailParts.join(", ")})`;
@@ -266,7 +266,7 @@ export default function MealsCard({ readOnly = false }: MealsCardProps = {}) {
                   </p>
                   {hasMeal ? (
                     <div className="text-[0.8125rem] text-white/80 space-y-0.5">
-                      <p className="font-medium text-white/95">{(meal.dish ?? "").replace(/\s*\([^)]*\)\s*$/, "")}</p>
+                      <p className="font-medium text-white/95">{(meal.dish ?? "").replace(/\s*\([^)]*\)\s*$/, "").replace("· with ", "· ")}</p>
                       {meal.drink && <p className="text-white/60">Drink: {meal.drink}</p>}
                     </div>
                   ) : suggestion ? (
