@@ -7,7 +7,7 @@ import { getApiBase, withActorBody } from "../../../lib/api";
 import { useRealtimeEvent } from "../../context/RealtimeContext";
 import { runMealIntelligenceForSlot } from "../../../lib/meals/runMealIntelligence";
 import type { MealSuggestionResult } from "../../../lib/meals/runMealIntelligence";
-import { BREAKFAST_ITEMS, LUNCH_ITEMS, DINNER_ITEMS, DISH_SUB_OPTIONS } from "../../../data/menu";
+import { BREAKFAST_ITEMS, LUNCH_ITEMS, DINNER_ITEMS, DISH_SUB_OPTIONS, SOUP_ITEMS, LUNCH_ITEMS_BY_PROTEIN } from "../../../data/menu";
 
 type MealSlot = "breakfast" | "lunch" | "dinner";
 const MENU_BY_SLOT: Record<MealSlot, readonly string[]> = {
@@ -134,7 +134,7 @@ export default function MealsCard({ readOnly = false }: MealsCardProps = {}) {
       });
       // Dish name: "Salmon · with Rice" or "Eggs (Scrambled, Medium)"
       let dishName = subOptions.dish;
-      if (cardParts.length > 0) dishName += ` · with ${cardParts.join(", ")}`;
+      if (cardParts.length > 0) dishName += ` · ${cardParts.join(", ")}`;
       if (detailParts.length > 0) dishName += ` (${detailParts.join(", ")})`;
       chooseDish(modalSlot, dishName);
       setSubOptions(null);
@@ -327,14 +327,37 @@ export default function MealsCard({ readOnly = false }: MealsCardProps = {}) {
                     placeholder="Search menu…" autoFocus
                     className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-[0.875rem] text-white/90 placeholder:text-white/25 outline-none" />
                   <div className="flex-1 min-h-0 overflow-y-auto space-y-1">
-                    {MENU_BY_SLOT[modalSlot]
-                      .filter((d) => !pickerSearch || d.toLowerCase().includes(pickerSearch.toLowerCase()))
-                      .map((dish) => (
-                        <button key={dish} type="button" onClick={() => handleDishWithSubOptions(modalSlot, dish)} disabled={accepting}
-                          className="w-full text-left rounded-xl px-3.5 py-2.5 text-[0.875rem] text-white/80 hover:bg-white/10 transition truncate">
-                          {dish}
-                        </button>
-                      ))}
+                    {modalSlot === "lunch" && !pickerSearch ? (
+                      /* Categorized lunch menu */
+                      <>
+                        {SOUP_ITEMS.length > 0 && (
+                          <>
+                            <p className="text-[0.625rem] text-white/35 uppercase tracking-wider pt-2 pb-1 px-1">Appetizers</p>
+                            {([...SOUP_ITEMS] as string[]).map((dish) => (
+                              <button key={dish} type="button" onClick={() => handleDishWithSubOptions(modalSlot, dish)} disabled={accepting}
+                                className="w-full text-left rounded-xl px-3.5 py-2.5 text-[0.875rem] text-white/80 hover:bg-white/10 transition truncate">{dish}</button>
+                            ))}
+                          </>
+                        )}
+                        {Object.entries(LUNCH_ITEMS_BY_PROTEIN).map(([protein, dishes]) => (
+                          <div key={protein}>
+                            <p className="text-[0.625rem] text-white/35 uppercase tracking-wider pt-3 pb-1 px-1">{protein}</p>
+                            {([...dishes] as string[]).map((dish) => (
+                              <button key={dish} type="button" onClick={() => handleDishWithSubOptions(modalSlot, dish)} disabled={accepting}
+                                className="w-full text-left rounded-xl px-3.5 py-2.5 text-[0.875rem] text-white/80 hover:bg-white/10 transition truncate">{dish}</button>
+                            ))}
+                          </div>
+                        ))}
+                      </>
+                    ) : (
+                      /* Flat list for breakfast/dinner or when searching */
+                      MENU_BY_SLOT[modalSlot]
+                        .filter((d) => !pickerSearch || d.toLowerCase().includes(pickerSearch.toLowerCase()))
+                        .map((dish) => (
+                          <button key={dish} type="button" onClick={() => handleDishWithSubOptions(modalSlot, dish)} disabled={accepting}
+                            className="w-full text-left rounded-xl px-3.5 py-2.5 text-[0.875rem] text-white/80 hover:bg-white/10 transition truncate">{dish}</button>
+                        ))
+                    )}
                   </div>
                   <button type="button" onClick={() => { setShowPicker(false); setPickerSearch(""); }}
                     className="shrink-0 w-full rounded-2xl border border-white/10 bg-[#0f172a]/70 py-2.5 text-[0.8125rem] text-white/60 transition">
