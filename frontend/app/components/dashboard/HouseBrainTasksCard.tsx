@@ -17,6 +17,7 @@ import { TASK_CATEGORIES } from "../../../lib/taskCategories";
 import { useRealtimeEvent } from "../../context/RealtimeContext";
 import { getApiBase, withActorBody } from "../../../lib/api";
 import { formatTaskTimeRange } from "../../../lib/scheduling/formatTaskTimeRange";
+import { getStoredRole, USER_DEFAULT_ROOM, ALL_ROOMS } from "../../../lib/roles";
 
 const LONG_PRESS_MS = 600;
 
@@ -94,6 +95,7 @@ function SortableTaskRow({
             </p>
           )}
           <p className="text-[0.875rem] font-medium text-white/90 truncate">{task.title}</p>
+          {task.room && <p className="text-[0.5625rem] text-white/35 truncate">{task.room}</p>}
         </div>
         {!readOnly && (
           <span
@@ -125,7 +127,8 @@ function TaskActionModal({
         <h3 className="text-lg font-semibold text-white/95 mb-1 pr-8">{task.title}</h3>
         <p className="text-[0.75rem] text-white/40 mb-4">
           {getCategoryIcon(task.category ?? "misc")} {task.category ?? "misc"}
-          {task.assignedBy ? ` · Assigned by ${task.assignedBy}` : ""}
+          {task.room ? ` · ${task.room}` : ""}
+          {task.assignedBy ? ` · by ${task.assignedBy}` : ""}
         </p>
         {task.startTime && (
           <dl className="space-y-2 text-[0.8125rem] mb-5 border-t border-white/[0.06] pt-3">
@@ -404,6 +407,10 @@ export default function HouseBrainTasksCard({
   const [newCategory, setNewCategory] = useState("misc");
   const [newDuration, setNewDuration] = useState(30);
   const [newTime, setNewTime] = useState("");
+  const [newRoom, setNewRoom] = useState(() => {
+    const role = typeof window !== "undefined" ? getStoredRole() : null;
+    return role ? (USER_DEFAULT_ROOM[role] || "General") : "General";
+  });
   const [adding, setAdding] = useState(false);
   const scrollRef = useRef<HTMLUListElement>(null);
   const [fadeTop, setFadeTop] = useState(false);
@@ -629,8 +636,8 @@ export default function HouseBrainTasksCard({
     try {
       const today = new Date().toISOString().slice(0, 10);
       const taskBody = newTime
-        ? { title: t, date: today, startTime: newTime, durationMinutes: newDuration, category: newCategory }
-        : { title: t, date: today, timeWindow: "auto", durationMinutes: newDuration, category: newCategory };
+        ? { title: t, date: today, startTime: newTime, durationMinutes: newDuration, category: newCategory, room: newRoom }
+        : { title: t, date: today, timeWindow: "auto", durationMinutes: newDuration, category: newCategory, room: newRoom };
       await getApiBase("/api/tasks", {
         method: "POST",
         body: withActorBody(taskBody),
@@ -688,6 +695,10 @@ export default function HouseBrainTasksCard({
               <input type="time" value={newTime} onChange={(e) => setNewTime(e.target.value)}
                 className="rounded-xl border border-white/10 bg-white/5 px-2 py-1.5 text-[0.75rem] text-white/70 outline-none"
                 placeholder="Auto" title={newTime ? `Start at ${newTime}` : "Auto-schedule"} />
+              <select value={newRoom} onChange={(e) => setNewRoom(e.target.value)}
+                className="rounded-xl border border-white/10 bg-white/5 px-2 py-1.5 text-[0.75rem] text-white/70 outline-none">
+                {ALL_ROOMS.map((r) => <option key={r} value={r}>{r}</option>)}
+              </select>
             </div>
           </form>
         )}

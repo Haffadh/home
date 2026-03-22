@@ -116,6 +116,34 @@ export const ROLE_DEFAULT_ROUTE: Record<Role, string> = {
   admin: "/panel/admin",
 };
 
+/** Default room for each user (auto-detected when creating tasks) */
+export const USER_DEFAULT_ROOM: Record<string, string> = {
+  moeen: "Master Bedroom",
+  samya: "Master Bedroom",
+  nawaf: "Winklevi Room",
+  ahmed: "Winklevi Room",
+  mariam: "Mariam Room",
+  abdullah: "Kitchen",
+  kitchen: "Kitchen",
+  living_room: "Living Room",
+  dining_room: "Dining Room",
+  master_bedroom: "Master Bedroom",
+  winklevi_room: "Winklevi Room",
+  mariam_room: "Mariam Room",
+};
+
+/** All rooms available for task assignment */
+export const ALL_ROOMS = [
+  "Kitchen",
+  "Living Room",
+  "Dining Room",
+  "Master Bedroom",
+  "Winklevi Room",
+  "Mariam Room",
+  "Outside",
+  "General",
+] as const;
+
 export const STORAGE_KEY = "shh_role";
 
 const VALID_ROLES: Role[] = [...USER_ROLES, ...ROOM_ROLES, "admin"];
