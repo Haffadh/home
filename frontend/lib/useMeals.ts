@@ -79,6 +79,16 @@ export function useMeals(): {
 
   useRealtimeTable("meals", load);
 
+  // Also listen for WebSocket meals_updated events (works without Supabase)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.event === "meals_updated") load();
+    };
+    window.addEventListener("realtime", handler);
+    return () => window.removeEventListener("realtime", handler);
+  }, [load]);
+
   const setMealSlot = useCallback(async (slot: MealSlot, entry: MealEntry | null) => {
     try {
       if (entry === null) {

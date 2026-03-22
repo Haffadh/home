@@ -911,6 +911,8 @@ fastify.post("/api/meals", { preHandler: [requireAuth] }, async (request, reply)
   const portions = typeof body.portions === "number" ? body.portions : 1;
   const requested_by = typeof body.requested_by === "string" ? body.requested_by.trim() : (body.actorName || null);
   try {
+    // Upsert: delete existing meal for this slot (type), then insert new one
+    await db.query("DELETE FROM meals WHERE type = $1", [type]);
     const { rows } = await db.query(
       "INSERT INTO meals (type, dish, drink, portions, requested_by) VALUES ($1, $2, $3, $4, $5) RETURNING *",
       [type, dish, drink, portions, requested_by]
