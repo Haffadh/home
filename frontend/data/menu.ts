@@ -86,6 +86,21 @@ export const ITEMS_WITH_PROMPTS: Record<string, { label: string; fields: string[
   },
 };
 
+/** Dishes with sub-options — ambiguous names that need clarification */
+export const DISH_SUB_OPTIONS: Record<string, { question: string; options: string[] }[]> = {
+  Eggs: [
+    { question: "How would you like them?", options: ["Omelette", "Scrambled", "Fried", "Boiled", "Poached"] },
+    { question: "How done?", options: ["Runny", "Medium", "Well done"] },
+  ],
+  Salmon: [
+    { question: "How would you like it?", options: ["Grilled", "Baked", "Pan-seared", "Poached", "Raw (Sashimi)"] },
+    { question: "How done?", options: ["Medium rare", "Medium", "Well done"] },
+  ],
+  Yogurt: [
+    { question: "Any toppings?", options: ["Plain", "Honey & granola", "Fruits", "Nuts & seeds"] },
+  ],
+};
+
 export type BreakfastItem = (typeof BREAKFAST_ITEMS)[number];
 export type LunchItem = (typeof LUNCH_ITEMS)[number];
 export type DinnerItem = (typeof DINNER_ITEMS)[number];

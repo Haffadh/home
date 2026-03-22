@@ -7,7 +7,7 @@ import { getApiBase, withActorBody } from "../../../lib/api";
 import { useRealtimeEvent } from "../../context/RealtimeContext";
 import { runMealIntelligenceForSlot } from "../../../lib/meals/runMealIntelligence";
 import type { MealSuggestionResult } from "../../../lib/meals/runMealIntelligence";
-import { BREAKFAST_ITEMS, LUNCH_ITEMS, DINNER_ITEMS } from "../../../data/menu";
+import { BREAKFAST_ITEMS, LUNCH_ITEMS, DINNER_ITEMS, DISH_SUB_OPTIONS } from "../../../data/menu";
 
 type MealSlot = "breakfast" | "lunch" | "dinner";
 const MENU_BY_SLOT: Record<MealSlot, readonly string[]> = {
@@ -42,6 +42,13 @@ export default function MealsCard({ readOnly = false }: MealsCardProps = {}) {
   const [accepting, setAccepting] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
   const [pickerSearch, setPickerSearch] = useState("");
+  const [dishImage, setDishImage] = useState<string | null>(null);
+  const [customPhoto, setCustomPhoto] = useState<Record<string, string>>({}); // dish→base64
+  const [imageClickCount, setImageClickCount] = useState(0);
+  const [showPhotoUpload, setShowPhotoUpload] = useState(false);
+  const [subOptions, setSubOptions] = useState<{ dish: string; step: number; choices: string[] } | null>(null);
+  const photoRef = useRef<HTMLInputElement>(null);
+  const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Long press
   const pressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isLongPress, setIsLongPress] = useState(false);
@@ -61,6 +68,68 @@ export default function MealsCard({ readOnly = false }: MealsCardProps = {}) {
     if (pressTimerRef.current) { clearTimeout(pressTimerRef.current); pressTimerRef.current = null; }
   }
   useEffect(() => { return () => { if (pressTimerRef.current) clearTimeout(pressTimerRef.current); }; }, []);
+
+  // Load dish image when modal opens
+  useEffect(() => {
+    if (!modalSlot) { setDishImage(null); return; }
+    const meal = meals[modalSlot];
+    const suggestion = !meal ? getSuggestionForSlot(modalSlot) : null;
+    const dishName = meal?.dish || suggestion?.meal;
+    if (!dishName) return;
+    // Check for custom photo first
+    if (customPhoto[dishName]) { setDishImage(customPhoto[dishName]); return; }
+    getApiBase(`/api/meals/image?dish=${encodeURIComponent(dishName)}`).then((data) => {
+      const url = (data as { url?: string })?.url;
+      if (url) setDishImage(url);
+    }).catch(() => {});
+  }, [modalSlot, meals, customPhoto]);
+
+  function handleImageClick(dishName: string) {
+    setImageClickCount((c) => {
+      const next = c + 1;
+      if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
+      if (next >= 3) {
+        setShowPhotoUpload(true);
+        return 0;
+      }
+      clickTimerRef.current = setTimeout(() => setImageClickCount(0), 600);
+      return next;
+    });
+  }
+
+  function handlePhotoUpload(file: File, dishName: string) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = reader.result as string;
+      setCustomPhoto((prev) => ({ ...prev, [dishName]: base64 }));
+      setDishImage(base64);
+      setShowPhotoUpload(false);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function handleDishWithSubOptions(slot: MealSlot, dish: string) {
+    const subs = DISH_SUB_OPTIONS[dish];
+    if (subs && subs.length > 0) {
+      setSubOptions({ dish, step: 0, choices: [] });
+    } else {
+      chooseDish(slot, dish);
+    }
+  }
+
+  function handleSubOptionChoice(choice: string) {
+    if (!subOptions || !modalSlot) return;
+    const newChoices = [...subOptions.choices, choice];
+    const subs = DISH_SUB_OPTIONS[subOptions.dish];
+    if (newChoices.length < subs.length) {
+      setSubOptions({ ...subOptions, step: subOptions.step + 1, choices: newChoices });
+    } else {
+      // All questions answered — create the dish with preferences
+      const dishName = `${subOptions.dish} (${newChoices.join(", ")})`;
+      chooseDish(modalSlot, dishName);
+      setSubOptions(null);
+    }
+  }
 
   const loadMeals = useCallback(async () => {
     try {
@@ -221,7 +290,27 @@ export default function MealsCard({ readOnly = false }: MealsCardProps = {}) {
 
               <p className="text-[0.625rem] text-white/40 uppercase tracking-wider mb-1">{label}</p>
 
-              {showPicker ? (
+              {/* Sub-options flow (eggs, salmon, etc.) */}
+              {subOptions ? (() => {
+                const subs = DISH_SUB_OPTIONS[subOptions.dish];
+                const currentQ = subs[subOptions.step];
+                return (
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold text-white/95">{subOptions.dish}</h3>
+                    <p className="text-[0.875rem] text-white/60">{currentQ.question}</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {currentQ.options.map((opt) => (
+                        <button key={opt} type="button" onClick={() => handleSubOptionChoice(opt)}
+                          className="rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-[0.8125rem] text-white/80 hover:bg-white/10 transition">
+                          {opt}
+                        </button>
+                      ))}
+                    </div>
+                    <button type="button" onClick={() => setSubOptions(null)}
+                      className="text-[0.75rem] text-white/40 hover:text-white/60">Cancel</button>
+                  </div>
+                );
+              })() : showPicker ? (
                 <div className="flex-1 min-h-0 flex flex-col gap-3">
                   <h3 className="text-lg font-semibold text-white/95">Choose a dish</h3>
                   <input type="text" value={pickerSearch} onChange={(e) => setPickerSearch(e.target.value)}
@@ -231,7 +320,7 @@ export default function MealsCard({ readOnly = false }: MealsCardProps = {}) {
                     {MENU_BY_SLOT[modalSlot]
                       .filter((d) => !pickerSearch || d.toLowerCase().includes(pickerSearch.toLowerCase()))
                       .map((dish) => (
-                        <button key={dish} type="button" onClick={() => chooseDish(modalSlot, dish)} disabled={accepting}
+                        <button key={dish} type="button" onClick={() => handleDishWithSubOptions(modalSlot, dish)} disabled={accepting}
                           className="w-full text-left rounded-xl px-3.5 py-2.5 text-[0.875rem] text-white/80 hover:bg-white/10 transition truncate">
                           {dish}
                         </button>
@@ -244,6 +333,23 @@ export default function MealsCard({ readOnly = false }: MealsCardProps = {}) {
                 </div>
               ) : hasMeal ? (
                 <div className="space-y-4">
+                  {/* Dish image */}
+                  {dishImage && (
+                    <div className="relative">
+                      <img src={dishImage} alt={meal.dish ?? ""} onClick={() => handleImageClick(meal.dish ?? "")}
+                        className="w-full h-36 object-cover rounded-2xl cursor-pointer" />
+                      {showPhotoUpload && (
+                        <div className="absolute inset-0 bg-black/60 rounded-2xl flex items-center justify-center">
+                          <button type="button" onClick={() => photoRef.current?.click()}
+                            className="rounded-xl bg-white/20 px-4 py-2 text-[0.8125rem] text-white font-medium">
+                            📸 Take photo
+                          </button>
+                          <input ref={photoRef} type="file" accept="image/*" capture="environment" className="hidden"
+                            onChange={(e) => e.target.files?.[0] && handlePhotoUpload(e.target.files[0], meal.dish ?? "")} />
+                        </div>
+                      )}
+                    </div>
+                  )}
                   <h3 className="text-xl font-semibold text-white/95">{meal.dish}</h3>
                   {meal.drink && <p className="text-[0.875rem] text-white/60">Drink: {meal.drink}</p>}
                   <p className="text-[0.875rem] text-white/50">
@@ -256,7 +362,7 @@ export default function MealsCard({ readOnly = false }: MealsCardProps = {}) {
                         Change
                       </button>
                     )}
-                    <button type="button" onClick={() => setModalSlot(null)}
+                    <button type="button" onClick={() => { setModalSlot(null); setShowPhotoUpload(false); }}
                       className="flex-1 rounded-2xl border border-white/10 bg-[#0f172a]/70 py-2.5 text-[0.8125rem] text-white/60 transition">
                       Close
                     </button>
@@ -264,6 +370,9 @@ export default function MealsCard({ readOnly = false }: MealsCardProps = {}) {
                 </div>
               ) : suggestion ? (
                 <div className="space-y-4">
+                  {dishImage && (
+                    <img src={dishImage} alt={suggestion.meal} className="w-full h-36 object-cover rounded-2xl" />
+                  )}
                   <div className="flex items-center gap-2">
                     <span className="ai-sparkle text-violet-300/80">&#10024;</span>
                     <h3 className="text-xl font-semibold text-violet-200/90">{suggestion.meal}</h3>
