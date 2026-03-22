@@ -357,58 +357,31 @@ function AuditModal({ inventoryItems, onClose, onDone }: {
 
           {step === "review" && (
             <div className="space-y-2">
-              {/* Found items */}
-              {entries.filter((e) => e.status === "found").length > 0 && (
-                <p className="text-[0.625rem] text-emerald-400/60 uppercase tracking-wider">Confirmed</p>
-              )}
-              {entries.filter((e) => e.status === "found").map((e) => {
-                const changed = e.newQty !== null && e.newQty !== Number(e.item.quantity);
+              {/* All audited items — editable quantities */}
+              {entries.filter((e) => e.status !== "pending").map((e) => {
+                const isFound = e.status === "found";
                 return (
                   <div key={e.item.id} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 border ${
-                    changed ? "bg-emerald-500/10 border-emerald-400/15" : "bg-emerald-500/5 border-emerald-400/10"
+                    isFound ? "bg-emerald-500/5 border-emerald-400/10" : "bg-rose-500/5 border-rose-400/10"
                   }`}>
-                    <span className="text-emerald-400 text-sm shrink-0">✓</span>
+                    <span className={`text-sm shrink-0 ${isFound ? "text-emerald-400" : "text-rose-400"}`}>
+                      {isFound ? "✓" : "✗"}
+                    </span>
                     <div className="flex-1 min-w-0">
                       <p className="text-[0.8125rem] text-white/90 truncate">{e.item.name}</p>
+                      <p className="text-[0.5625rem] text-white/30">Was {e.item.quantity} {e.item.unit}</p>
                     </div>
-                    <div className="text-right shrink-0">
-                      {changed ? (
-                        <div>
-                          <span className="text-[0.6875rem] text-white/30 line-through mr-1">{e.item.quantity}</span>
-                          <span className="text-[0.8125rem] text-emerald-300 font-medium">{e.newQty}</span>
-                          <span className="text-[0.6875rem] text-white/40 ml-0.5">{e.item.unit}</span>
-                        </div>
-                      ) : (
-                        <span className="text-[0.8125rem] text-white/60">{e.newQty} {e.item.unit}</span>
-                      )}
-                    </div>
+                    <input type="number" min={0} step="any" value={e.newQty ?? 0}
+                      onClick={(ev) => ev.stopPropagation()}
+                      onChange={(ev) => {
+                        const val = Number(ev.target.value);
+                        setEntries((prev) => prev.map((x) => x.item.id === e.item.id ? { ...x, newQty: val } : x));
+                      }}
+                      className="w-16 rounded-lg px-2 py-1.5 text-[0.8125rem] text-white/90 border border-white/10 bg-[#0f172a]/50 outline-none text-center" />
+                    <span className="text-[0.6875rem] text-white/40 w-8">{e.item.unit}</span>
                   </div>
                 );
               })}
-              {/* Not found items */}
-              {entries.filter((e) => e.status === "not_found").length > 0 && (
-                <p className="text-[0.625rem] text-rose-400/60 uppercase tracking-wider mt-3">Not found in photo</p>
-              )}
-              {entries.filter((e) => e.status === "not_found").map((e) => (
-                <div key={e.item.id} className="flex items-center gap-3 rounded-xl px-3 py-2.5 border bg-rose-500/5 border-rose-400/10">
-                  <span className="text-rose-400 text-sm shrink-0">✗</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[0.8125rem] text-white/70 truncate">{e.item.name}</p>
-                    <p className="text-[0.5625rem] text-white/30">Was {e.item.quantity} {e.item.unit} — will be set to 0</p>
-                  </div>
-                  <input type="number" min={0} step="any" value={e.newQty ?? 0}
-                    onClick={(ev) => ev.stopPropagation()}
-                    onChange={(ev) => {
-                      const val = Number(ev.target.value);
-                      setEntries((prev) => prev.map((x) => x.item.id === e.item.id ? { ...x, newQty: val } : x));
-                    }}
-                    className="w-14 rounded-lg px-2 py-1 text-[0.75rem] text-white/90 border border-white/10 bg-[#0f172a]/50 outline-none text-center" />
-                </div>
-              ))}
-              {/* Recommendations accepted */}
-              {entries.filter((e) => e.status === ("recommended" as AuditStatus)).length > 0 && (
-                <p className="text-[0.625rem] text-amber-400/60 uppercase tracking-wider mt-3">Added from recommendation</p>
-              )}
             </div>
           )}
         </div>
