@@ -16,7 +16,32 @@
 }
 
 html {
-  font-size: 21px; /* base 16px + 5px global bump */
+  font-size: 21px; /* base for iPad 7th gen (Kitchen) */
+}
+
+/* Samsung Galaxy A50 (360px wide) — compact */
+@media (max-width: 380px) {
+  html { font-size: 15px; }
+}
+
+/* iPhone 15 Pro / iPhone Air (393px) — standard phone */
+@media (min-width: 381px) and (max-width: 414px) {
+  html { font-size: 16px; }
+}
+
+/* iPhone 17 Pro Max (430px) — large phone */
+@media (min-width: 415px) and (max-width: 450px) {
+  html { font-size: 17px; }
+}
+
+/* iPad Mini 1st/2nd gen (768px portrait, 1024px landscape) — compact tablet */
+@media (min-width: 700px) and (max-width: 850px) {
+  html { font-size: 18px; }
+}
+
+/* iPad 7th gen+ (810px+ portrait) — standard tablet */
+@media (min-width: 851px) {
+  html { font-size: 21px; }
 }
 
 html,

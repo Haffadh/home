@@ -281,10 +281,18 @@ function AuditModal({ inventoryItems, onClose, onDone }: {
               {!image ? (
                 <div className="space-y-3">
                   <button type="button" onClick={() => fileRef.current?.click()}
-                    className="w-full rounded-2xl border-2 border-dashed border-white/15 bg-white/5 py-8 text-center hover:border-white/25 transition">
+                    className="w-full rounded-2xl border-2 border-dashed border-white/15 bg-white/5 py-6 text-center hover:border-white/25 transition">
                     <p className="text-2xl mb-2">📸</p>
-                    <p className="text-[0.8125rem] text-white/70">Take a photo of these items</p>
+                    <p className="text-[0.8125rem] text-white/70">Take a photo</p>
                     <p className="text-[0.6875rem] text-white/40 mt-1">Multiple items in one photo is fine</p>
+                  </button>
+                  <button type="button" onClick={() => {
+                    // Manual count: show input for each pending item
+                    setEntries((prev) => prev.map((e) => e.selected && e.status === "pending" ? { ...e, status: "found" as AuditStatus, newQty: Number(e.item.quantity) } : e));
+                    setStep("review");
+                  }}
+                    className="w-full rounded-2xl border border-white/10 bg-white/5 py-3 text-center text-[0.8125rem] text-white/60 hover:bg-white/10 transition">
+                    ✏️ Manual count instead
                   </button>
                   <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden"
                     onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
@@ -539,6 +547,8 @@ export default function InventoryPage() {
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [openCat, setOpenCat] = useState<Category | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
+  const [auditHistory, setAuditHistory] = useState<{ date: string; count: number; entries: { time: string; action: string; payload: Record<string, unknown> }[] }[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [showAudit, setShowAudit] = useState(false);
   const [editQty, setEditQty] = useState<Record<number, number>>({});
@@ -553,6 +563,13 @@ export default function InventoryPage() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  async function loadHistory() {
+    try {
+      const data = (await getApiBase("/api/inventory/audit-history")) as { history?: typeof auditHistory };
+      setAuditHistory(data?.history ?? []);
+    } catch { setAuditHistory([]); }
+  }
   useRealtimeEvent("inventory_updated", load);
 
   const lowStock = items.filter((i) => i.quantity <= (i.threshold ?? 2));
@@ -656,6 +673,10 @@ export default function InventoryPage() {
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-semibold text-white/95 tracking-tight">Inventory</h1>
         <div className="flex gap-2">
+          <button type="button" onClick={() => { setShowHistory(true); loadHistory(); }}
+            className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-[0.8125rem] text-white/50 hover:text-white/80 transition">
+            History
+          </button>
           <button type="button" onClick={() => setShowAudit(true)}
             className="flex items-center gap-1.5 rounded-xl border border-violet-400/20 bg-violet-500/10 px-3.5 py-2 text-[0.8125rem] font-medium text-violet-300/90 hover:bg-violet-500/20 transition">
             <span className="ai-sparkle text-[0.75rem]">&#10024;</span> Audit
@@ -847,6 +868,47 @@ export default function InventoryPage() {
       {/* Modals */}
       {showAdd && <AddItemModal onClose={() => setShowAdd(false)} onSave={addItem} />}
       {showAudit && <AuditModal inventoryItems={items} onClose={() => setShowAudit(false)} onDone={handleAuditDone} />}
+
+      {/* Audit History modal */}
+      {showHistory && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" role="dialog" aria-modal="true">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowHistory(false)} />
+          <div className="relative w-full max-w-md max-h-[80vh] flex flex-col rounded-[28px] p-6 animate-modal-in"
+            style={{ background: "rgba(18,24,38,0.95)", backdropFilter: "blur(24px)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: "28px", boxShadow: "0 25px 50px -12px rgba(0,0,0,0.5)" }}
+            onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold text-white/95 mb-4 shrink-0">Audit History</h3>
+            <div className="flex-1 min-h-0 overflow-y-auto space-y-3">
+              {auditHistory.length === 0 ? (
+                <p className="text-[0.8125rem] text-white/40 text-center py-6">No audit history yet.</p>
+              ) : auditHistory.map((day) => (
+                <div key={day.date} className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-[0.875rem] font-medium text-white/90">
+                      {new Date(day.date + "T12:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
+                    </p>
+                    <span className="text-[0.6875rem] text-white/40">{day.count} changes</span>
+                  </div>
+                  <div className="space-y-1">
+                    {day.entries.slice(0, 5).map((e, i) => (
+                      <p key={i} className="text-[0.75rem] text-white/50">
+                        {e.action === "created" ? "+" : "~"} {String((e.payload as Record<string, unknown>)?.name || (e.payload as Record<string, unknown>)?.title || "item")}
+                        {e.payload && (e.payload as Record<string, unknown>).addedQty ? ` (+${String((e.payload as Record<string, unknown>).addedQty)})` : ""}
+                      </p>
+                    ))}
+                    {day.entries.length > 5 && (
+                      <p className="text-[0.625rem] text-white/30">+{day.entries.length - 5} more</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button type="button" onClick={() => setShowHistory(false)}
+              className="shrink-0 w-full mt-4 rounded-2xl border border-white/10 bg-[#0f172a]/70 py-2.5 text-[0.8125rem] text-white/60 transition">
+              Close
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Location prompt for new items after audit */}
       {locationPrompts.length > 0 && (

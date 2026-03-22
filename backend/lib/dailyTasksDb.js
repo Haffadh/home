@@ -37,6 +37,14 @@ export async function ensureInstancesForDate(db, staffUserId, dateStr) {
       shouldHave = true;
     } else if (t.recurrence === "weekly" && Array.isArray(t.recurrence_days)) {
       shouldHave = t.recurrence_days.includes(day);
+    } else if (t.recurrence === "monthly" && t.recurrence_day_of_month) {
+      const dayOfMonth = new Date(date + "T12:00:00Z").getUTCDate();
+      shouldHave = dayOfMonth === t.recurrence_day_of_month;
+    } else if (t.recurrence === "custom" && t.recurrence_interval > 0) {
+      const startMs = new Date(t.start_date + "T12:00:00Z").getTime();
+      const dateMs = new Date(date + "T12:00:00Z").getTime();
+      const daysDiff = Math.round((dateMs - startMs) / (24 * 60 * 60 * 1000));
+      shouldHave = daysDiff >= 0 && daysDiff % t.recurrence_interval === 0;
     }
 
     if (!shouldHave) continue;
@@ -87,6 +95,15 @@ export async function getTasksWithInstances(db, staffUserId, dateStr) {
     if (t.recurrence === "none") return t.start_date === date;
     if (t.recurrence === "daily") return true;
     if (t.recurrence === "weekly" && Array.isArray(t.recurrence_days)) return t.recurrence_days.includes(day);
+    if (t.recurrence === "monthly" && t.recurrence_day_of_month) {
+      return new Date(date + "T12:00:00Z").getUTCDate() === t.recurrence_day_of_month;
+    }
+    if (t.recurrence === "custom" && t.recurrence_interval > 0) {
+      const startMs = new Date(t.start_date + "T12:00:00Z").getTime();
+      const dateMs = new Date(date + "T12:00:00Z").getTime();
+      const daysDiff = Math.round((dateMs - startMs) / (24 * 60 * 60 * 1000));
+      return daysDiff >= 0 && daysDiff % t.recurrence_interval === 0;
+    }
     return false;
   });
 
@@ -100,35 +117,37 @@ export async function getTasksWithInstances(db, staffUserId, dateStr) {
 
 export async function createDailyTask(db, payload) {
   const {
-    staff_user_id,
+    staff_user_id = 1,
     title,
     notes = "",
-    window_start,
-    window_end,
+    window_start = "08:00",
+    window_end = "12:00",
     timezone = "Asia/Bahrain",
     recurrence = "none",
     recurrence_days = null,
+    recurrence_day_of_month = null,
+    recurrence_interval = null,
     start_date,
     end_date = null,
+    room = null,
+    assigned_by = null,
+    category = "misc",
   } = payload;
 
   const { rows } = await db.query(
     `INSERT INTO daily_tasks (
       staff_user_id, title, notes, window_start, window_end, timezone,
-      recurrence, recurrence_days, start_date, end_date, is_active, updated_at
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true, now())
+      recurrence, recurrence_days, recurrence_day_of_month, recurrence_interval,
+      start_date, end_date, room, assigned_by, category, is_active, updated_at
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, true, now())
     RETURNING *`,
     [
-      staff_user_id,
-      title,
-      notes,
-      window_start,
-      window_end,
-      timezone,
+      staff_user_id, title, notes, window_start, window_end, timezone,
       recurrence,
       recurrence_days && recurrence_days.length ? recurrence_days : null,
-      start_date,
-      end_date || null,
+      recurrence_day_of_month, recurrence_interval,
+      start_date, end_date || null,
+      room, assigned_by, category,
     ]
   );
   return rows[0];

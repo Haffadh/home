@@ -184,79 +184,150 @@ function CreateTaskModal({
   onSubmit,
 }: {
   onClose: () => void;
-  onSubmit: (opts: { title: string; category: string; room: string; urgent: boolean; recurring: boolean }) => void;
+  onSubmit: (opts: {
+    title: string; category: string; room: string; urgent: boolean;
+    recurring: boolean; recurrence?: string; recurrence_days?: number[];
+    recurrence_day_of_month?: number; recurrence_interval?: number;
+    startDate?: string; startTime?: string; durationMinutes?: number;
+  }) => void;
 }) {
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("misc");
-  const [room, setRoom] = useState("kitchen");
+  const [room, setRoom] = useState(() => {
+    if (typeof window === "undefined") return "None";
+    const r = localStorage.getItem("shh_role") || "";
+    const map: Record<string, string> = { moeen: "Master Bedroom", samya: "Master Bedroom", nawaf: "Winklevi Room", ahmed: "Winklevi Room", mariam: "Mariam Room" };
+    return map[r] || "None";
+  });
   const [urgent, setUrgent] = useState(false);
   const [recurring, setRecurring] = useState(false);
+  const [recurrence, setRecurrence] = useState("daily");
+  const [weekDays, setWeekDays] = useState<number[]>([]);
+  const [monthDay, setMonthDay] = useState(1);
+  const [customInterval, setCustomInterval] = useState(3);
+  const [startDate, setStartDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [startTime, setStartTime] = useState("");
+  const [duration, setDuration] = useState(30);
+
+  const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const toggleDay = (d: number) => setWeekDays((prev) => prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]);
 
   function handleSubmit() {
     const t = title.trim();
     if (!t) return;
-    onSubmit({ title: t, category, room, urgent, recurring });
+    onSubmit({
+      title: t, category, room, urgent, recurring,
+      recurrence: recurring ? recurrence : undefined,
+      recurrence_days: recurring && recurrence === "weekly" ? weekDays : undefined,
+      recurrence_day_of_month: recurring && recurrence === "monthly" ? monthDay : undefined,
+      recurrence_interval: recurring && recurrence === "custom" ? customInterval : undefined,
+      startDate, startTime: startTime || undefined, durationMinutes: duration,
+    });
     onClose();
   }
+
+  const inputCls = "w-full rounded-xl px-3.5 py-2.5 text-sm text-white/95 border border-white/10 bg-slate-800/80";
+  const labelCls = "block text-[0.625rem] text-white/40 uppercase tracking-wider mb-1";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div
-        className={`relative w-full max-w-sm rounded-2xl p-6 ${cardStyle} shadow-xl`}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h3 className="text-lg font-semibold text-white/95 mb-4">Create Task</h3>
-        <div className="space-y-3">
-          <input
-            type="text"
-            placeholder="Task name"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            className="w-full rounded-xl px-3.5 py-2.5 text-sm text-white/95 border border-white/10 bg-slate-800/80 placeholder:text-white/40"
-          />
-          <div>
-            <label className="block text-xs text-white/50 mb-1">Category</label>
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              className="w-full rounded-xl px-3.5 py-2.5 text-sm text-white/95 border border-white/10 bg-slate-800/80"
-            >
-              {TASK_CATEGORIES.map((c) => (
-                <option key={c.value} value={c.value}>{c.label}</option>
-              ))}
-            </select>
+      <div className={`relative w-full max-w-sm max-h-[80vh] flex flex-col rounded-2xl p-6 ${cardStyle} shadow-xl`} onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-lg font-semibold text-white/95 mb-4 shrink-0">Create Task</h3>
+        <div className="space-y-3 overflow-y-auto flex-1 min-h-0">
+          <input type="text" placeholder="Task name" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus
+            className={`${inputCls} placeholder:text-white/40`} />
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className={labelCls}>Category</label>
+              <select value={category} onChange={(e) => setCategory(e.target.value)} className={inputCls}>
+                {TASK_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.icon} {c.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className={labelCls}>Room</label>
+              <select value={room} onChange={(e) => setRoom(e.target.value)} className={inputCls}>
+                {["None", "Kitchen", "Living Room", "Dining Room", "Master Bedroom", "Winklevi Room", "Mariam Room", "Outside"].map((r) => (
+                  <option key={r} value={r}>{r}</option>
+                ))}
+              </select>
+            </div>
           </div>
-          <div>
-            <label className="block text-xs text-white/50 mb-1">Room (optional)</label>
-            <select
-              value={room}
-              onChange={(e) => setRoom(e.target.value)}
-              className="w-full rounded-xl px-3.5 py-2.5 text-sm text-white/95 border border-white/10 bg-slate-800/80"
-            >
-              {ROOM_OPTIONS.map((r) => (
-                <option key={r.value} value={r.value}>{r.label}</option>
-              ))}
-            </select>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className={labelCls}>Duration</label>
+              <select value={duration} onChange={(e) => setDuration(Number(e.target.value))} className={inputCls}>
+                {[15, 30, 45, 60, 90, 120].map((m) => <option key={m} value={m}>{m < 60 ? `${m}m` : `${m / 60}h`}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className={labelCls}>Time {startTime ? "" : "(auto)"}</label>
+              <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className={inputCls} />
+            </div>
           </div>
-          <div className="flex gap-4 pt-2">
+
+          <div>
+            <label className={labelCls}>Start date</label>
+            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={inputCls} />
+          </div>
+
+          <div className="flex gap-4 pt-1">
             <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" checked={urgent} onChange={(e) => setUrgent(e.target.checked)} className="rounded w-4 h-4" />
+              <input type="checkbox" checked={urgent} onChange={(e) => { setUrgent(e.target.checked); if (e.target.checked) setRecurring(false); }} className="rounded w-4 h-4" />
               <span className="text-sm text-white/90">Urgent</span>
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" checked={recurring} onChange={(e) => setRecurring(e.target.checked)} className="rounded w-4 h-4" />
+              <input type="checkbox" checked={recurring} onChange={(e) => { setRecurring(e.target.checked); if (e.target.checked) setUrgent(false); }} className="rounded w-4 h-4" />
               <span className="text-sm text-white/90">Recurring</span>
             </label>
           </div>
+
+          {recurring && (
+            <div className="space-y-3 pt-1 border-t border-white/[0.06]">
+              <div>
+                <label className={labelCls}>Frequency</label>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {(["daily", "weekly", "monthly", "custom"] as const).map((f) => (
+                    <button key={f} type="button" onClick={() => setRecurrence(f)}
+                      className={`rounded-lg py-2 text-[0.75rem] font-medium transition border ${recurrence === f ? "bg-white/15 text-white/90 border-white/20" : "bg-white/5 text-white/50 border-white/[0.06]"}`}>
+                      {f.charAt(0).toUpperCase() + f.slice(1)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {recurrence === "weekly" && (
+                <div>
+                  <label className={labelCls}>Days</label>
+                  <div className="flex gap-1">
+                    {DAYS.map((d, i) => (
+                      <button key={d} type="button" onClick={() => toggleDay(i)}
+                        className={`flex-1 rounded-lg py-2 text-[0.6875rem] font-medium transition border ${weekDays.includes(i) ? "bg-white/15 text-white/90 border-white/20" : "bg-white/5 text-white/40 border-white/[0.06]"}`}>
+                        {d}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {recurrence === "monthly" && (
+                <div>
+                  <label className={labelCls}>Day of month</label>
+                  <input type="number" min={1} max={28} value={monthDay} onChange={(e) => setMonthDay(Number(e.target.value))} className={inputCls} />
+                </div>
+              )}
+              {recurrence === "custom" && (
+                <div>
+                  <label className={labelCls}>Every X days</label>
+                  <input type="number" min={2} value={customInterval} onChange={(e) => setCustomInterval(Number(e.target.value))} className={inputCls} />
+                </div>
+              )}
+            </div>
+          )}
         </div>
-        <div className="flex gap-3 mt-6">
-          <button type="button" onClick={onClose} className="flex-1 rounded-xl py-2.5 text-sm font-medium bg-white/10 text-white/90">
-            Cancel
-          </button>
-          <button type="button" onClick={handleSubmit} disabled={!title.trim()} className="flex-1 rounded-xl py-2.5 text-sm font-medium bg-slate-600/80 text-white/90 disabled:opacity-50">
-            Create
-          </button>
+        <div className="flex gap-3 mt-4 shrink-0">
+          <button type="button" onClick={onClose} className="flex-1 rounded-xl py-2.5 text-sm font-medium bg-white/10 text-white/90">Cancel</button>
+          <button type="button" onClick={handleSubmit} disabled={!title.trim()} className="flex-1 rounded-xl py-2.5 text-sm font-medium bg-slate-600/80 text-white/90 disabled:opacity-50">Create</button>
         </div>
       </div>
     </div>
@@ -295,7 +366,39 @@ export default function HouseControlPanel() {
 
   useRealtimeTable("tasks", loadTodayTasks);
 
-  async function handleCreateTask(opts: { title: string; category: string; room: string; urgent: boolean; recurring: boolean }) {
+  async function handleCreateTask(opts: {
+    title: string; category: string; room: string; urgent: boolean; recurring: boolean;
+    recurrence?: string; recurrence_days?: number[]; recurrence_day_of_month?: number;
+    recurrence_interval?: number; startDate?: string; startTime?: string; durationMinutes?: number;
+  }) {
+    // Recurring task → create via daily-tasks API
+    if (opts.recurring && opts.recurrence) {
+      try {
+        const timeStart = opts.startTime || "08:00";
+        const dur = opts.durationMinutes || 60;
+        const [h, m] = timeStart.split(":").map(Number);
+        const endMins = h * 60 + m + dur;
+        const timeEnd = `${String(Math.floor(endMins / 60) % 24).padStart(2, "0")}:${String(endMins % 60).padStart(2, "0")}`;
+        await getApiBase("/api/daily-tasks", {
+          method: "POST",
+          body: withActorBody({
+            title: opts.title,
+            window_start: timeStart,
+            window_end: timeEnd,
+            recurrence: opts.recurrence,
+            recurrence_days: opts.recurrence_days,
+            recurrence_day_of_month: opts.recurrence_day_of_month,
+            recurrence_interval: opts.recurrence_interval,
+            start_date: opts.startDate || new Date().toISOString().slice(0, 10),
+            room: opts.room === "None" ? null : opts.room,
+            category: opts.category,
+          }),
+        });
+        broadcast_local("tasks_updated");
+      } catch { /* ignore */ }
+      return;
+    }
+
     if (opts.urgent) {
       // Check if Abdullah is busy by fetching today's tasks
       try {
@@ -328,16 +431,22 @@ export default function HouseControlPanel() {
       }).catch(() => {});
       return;
     }
-    // Non-urgent: schedule in next free slot
+    // Non-urgent: schedule with time slot logic
     try {
-      const today = new Date().toISOString().slice(0, 10);
-      await getApiBase("/api/tasks", {
-        method: "POST",
-        body: withActorBody({ title: opts.title, date: today, timeWindow: "auto", durationMinutes: 60, category: opts.category || "misc" }),
-      });
+      const date = opts.startDate || new Date().toISOString().slice(0, 10);
+      const dur = opts.durationMinutes || 60;
+      const roomVal = opts.room === "None" ? undefined : opts.room;
+      const taskBody = opts.startTime
+        ? { title: opts.title, date, startTime: opts.startTime, durationMinutes: dur, category: opts.category || "misc", room: roomVal }
+        : { title: opts.title, date, timeWindow: "auto", durationMinutes: dur, category: opts.category || "misc", room: roomVal };
+      await getApiBase("/api/tasks", { method: "POST", body: withActorBody(taskBody) });
     } catch {
       // ignore
     }
+  }
+
+  function broadcast_local(event: string) {
+    window.dispatchEvent(new CustomEvent("realtime", { detail: { event } }));
   }
 
   async function handleAbdullahBusyUrgent() {

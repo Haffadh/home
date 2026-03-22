@@ -1002,6 +1002,34 @@ fastify.delete("/api/inventory/:id", { preHandler: [requireAuth] }, async (reque
   } catch (e) { return sendError(reply, 500, safeErrorMessage(e)); }
 });
 
+// ---- Inventory Audit History ----
+fastify.get("/api/inventory/audit-history", { preHandler: [requireAuth] }, async (request, reply) => {
+  try {
+    const { rows } = await db.query(`
+      SELECT ts, action, payload_json
+      FROM activity_log
+      WHERE entity_type = 'inventory' AND action IN ('created', 'updated')
+      ORDER BY ts DESC
+      LIMIT 200
+    `);
+    // Group by day
+    const byDay = {};
+    for (const r of rows) {
+      const day = new Date(r.ts).toISOString().slice(0, 10);
+      if (!byDay[day]) byDay[day] = [];
+      byDay[day].push({ time: r.ts, action: r.action, payload: r.payload_json });
+    }
+    const history = Object.entries(byDay).map(([date, entries]) => ({
+      date,
+      count: entries.length,
+      entries,
+    })).slice(0, 30);
+    return reply.send({ ok: true, history });
+  } catch (e) {
+    return reply.send({ ok: true, history: [] });
+  }
+});
+
 fastify.post("/api/inventory/audit-photo", { preHandler: [requireAuth] }, async (request, reply) => {
   const body = request.body || {};
   const image = typeof body.image === "string" ? body.image : "";
@@ -1113,12 +1141,36 @@ setInterval(async () => {
 // Device health monitoring: every 2 min check devices, create notifications for offline/unhealthy
 startDeviceHealthScheduler(db, {});
 
+// Inventory audit reminder: check every hour, broadcast on Wed/Thu/Fri if no audit this week
+let lastAuditReminderDay = "";
+setInterval(async () => {
+  try {
+    const now = new Date();
+    const day = now.getDay(); // 0=Sun, 3=Wed, 4=Thu, 5=Fri
+    const todayStr = now.toISOString().slice(0, 10);
+    if (todayStr === lastAuditReminderDay) return;
+    if (day < 3 || day > 5) return; // Only Wed-Fri
+    // Check if audit was done this week (Mon-Sun)
+    const mondayOffset = (day + 6) % 7;
+    const monday = new Date(now); monday.setDate(now.getDate() - mondayOffset);
+    const mondayStr = monday.toISOString().slice(0, 10);
+    const { rows } = await db.query(
+      "SELECT COUNT(*) as cnt FROM activity_log WHERE entity_type = 'inventory' AND action = 'updated' AND ts >= $1",
+      [mondayStr]
+    );
+    if (Number(rows[0]?.cnt) > 0) return; // Audit done this week
+    lastAuditReminderDay = todayStr;
+    broadcast(fastify, "audit_reminder", { message: "Inventory audit is due this week" });
+    console.log("Broadcast: audit_reminder");
+  } catch { /* ignore */ }
+}, 60 * 60 * 1000); // Every hour
+
 // ---- Daily Tasks ----
 const TIME_REGEX = /^([01]?\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/;
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 function validTime(s) { return typeof s === "string" && TIME_REGEX.test(s.trim()); }
 function validDate(s) { return typeof s === "string" && DATE_REGEX.test(s.trim()) && !isNaN(new Date(s + "T12:00:00Z").getTime()); }
-function validRecurrence(s) { return s === "none" || s === "daily" || s === "weekly"; }
+function validRecurrence(s) { return ["none", "daily", "weekly", "monthly", "custom"].includes(s); }
 
 fastify.get("/api/daily-tasks", { preHandler: [requireAuth] }, async (request, reply) => {
   const staffUserId = request.query?.staff_user_id;
@@ -1130,20 +1182,36 @@ fastify.get("/api/daily-tasks", { preHandler: [requireAuth] }, async (request, r
 
 fastify.post("/api/daily-tasks", { preHandler: [requireAuth] }, async (request, reply) => {
   const body = request.body || {};
-  const { staff_user_id, window_start, window_end, start_date, end_date } = body;
   const title = (body.title || "").trim();
-  const notes = (body.notes || "").trim();
-  const timezone = (body.timezone || "Asia/Bahrain").trim();
-  const recurrence = validRecurrence(body.recurrence) ? body.recurrence : "none";
-  let recurrence_days = body.recurrence_days;
-  if (!staff_user_id || !Number.isInteger(Number(staff_user_id))) return sendError(reply, 400, "staff_user_id required (integer)");
   if (!title) return sendError(reply, 400, "title required");
-  if (!validTime(window_start)) return sendError(reply, 400, "window_start required (HH:MM or HH:MM:SS)");
-  if (!validTime(window_end)) return sendError(reply, 400, "window_end required (HH:MM or HH:MM:SS)");
-  if (!validDate(start_date)) return sendError(reply, 400, "start_date required (YYYY-MM-DD)");
-  if (recurrence === "weekly" && Array.isArray(recurrence_days)) recurrence_days = recurrence_days.filter(d => Number.isInteger(d) && d >= 0 && d <= 6);
-  else recurrence_days = null;
-  const row = await dailyTasksDb.createDailyTask(db, { staff_user_id: Number(staff_user_id), title, notes, window_start: String(window_start).trim(), window_end: String(window_end).trim(), timezone, recurrence, recurrence_days, start_date: String(start_date).trim(), end_date: end_date && validDate(end_date) ? end_date.trim() : null });
+  const window_start = validTime(body.window_start) ? String(body.window_start).trim() : "08:00";
+  const window_end = validTime(body.window_end) ? String(body.window_end).trim() : "12:00";
+  const start_date = validDate(body.start_date) ? String(body.start_date).trim() : new Date().toISOString().slice(0, 10);
+  const recurrence = validRecurrence(body.recurrence) ? body.recurrence : "none";
+  let recurrence_days = null;
+  if (recurrence === "weekly" && Array.isArray(body.recurrence_days)) {
+    recurrence_days = body.recurrence_days.filter(d => Number.isInteger(d) && d >= 0 && d <= 6);
+  }
+  const actor = getActor(request);
+  const row = await dailyTasksDb.createDailyTask(db, {
+    staff_user_id: Number(body.staff_user_id) || 1,
+    title,
+    notes: (body.notes || "").trim(),
+    window_start,
+    window_end,
+    timezone: (body.timezone || "Asia/Bahrain").trim(),
+    recurrence,
+    recurrence_days,
+    recurrence_day_of_month: recurrence === "monthly" && typeof body.recurrence_day_of_month === "number" ? body.recurrence_day_of_month : null,
+    recurrence_interval: recurrence === "custom" && typeof body.recurrence_interval === "number" ? body.recurrence_interval : null,
+    start_date,
+    end_date: body.end_date && validDate(body.end_date) ? body.end_date.trim() : null,
+    room: typeof body.room === "string" ? body.room.trim() : null,
+    assigned_by: actor.actor_name || null,
+    category: typeof body.category === "string" ? body.category : "misc",
+  });
+  await logActivity(db, { ...actor, action: "created", entity_type: "daily_task", entity_id: String(row.id), payload_json: { title, recurrence } });
+  broadcast(fastify, "tasks_updated", {});
   return reply.code(201).send({ ok: true, data: row });
 });
 
