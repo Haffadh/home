@@ -209,7 +209,7 @@ export default function DashboardShell({
       </aside>
 
       <div className="flex-1 flex flex-col min-w-0 min-h-0 relative z-10">
-        <header className="relative h-20 shrink-0 flex items-center justify-between gap-6 px-4 md:px-8 py-3">
+        <header className="relative h-24 shrink-0 flex items-center justify-between gap-6 px-4 md:px-8 py-4">
           <div
             className="absolute inset-0 pointer-events-none"
             style={{
