@@ -47,6 +47,7 @@ export default function MealsCard({ readOnly = false }: MealsCardProps = {}) {
   const [imageClickCount, setImageClickCount] = useState(0);
   const [showPhotoUpload, setShowPhotoUpload] = useState(false);
   const [subOptions, setSubOptions] = useState<{ dish: string; step: number; choices: string[] } | null>(null);
+  const [portionSize, setPortionSize] = useState(6);
   const photoRef = useRef<HTMLInputElement>(null);
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Long press
@@ -187,7 +188,7 @@ export default function MealsCard({ readOnly = false }: MealsCardProps = {}) {
     try {
       await getApiBase("/api/meals", {
         method: "POST",
-        body: withActorBody({ type: slot, dish: suggestion.meal, portions: 2 }),
+        body: withActorBody({ type: slot, dish: suggestion.meal, portions: portionSize }),
       });
       await loadMeals();
     } catch {
@@ -202,7 +203,7 @@ export default function MealsCard({ readOnly = false }: MealsCardProps = {}) {
     try {
       await getApiBase("/api/meals", {
         method: "POST",
-        body: withActorBody({ type: slot, dish, portions: 2 }),
+        body: withActorBody({ type: slot, dish, portions: portionSize }),
       });
       setShowPicker(false);
       setPickerSearch("");
@@ -337,7 +338,7 @@ export default function MealsCard({ readOnly = false }: MealsCardProps = {}) {
                   {dishImage && (
                     <div className="relative">
                       <img src={dishImage} alt={meal.dish ?? ""} onClick={() => handleImageClick(meal.dish ?? "")}
-                        className="w-full h-36 object-cover rounded-2xl cursor-pointer" />
+                        className="w-full h-36 object-cover rounded-2xl cursor-pointer" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
                       {showPhotoUpload && (
                         <div className="absolute inset-0 bg-black/60 rounded-2xl flex items-center justify-center">
                           <button type="button" onClick={() => photoRef.current?.click()}
@@ -355,6 +356,19 @@ export default function MealsCard({ readOnly = false }: MealsCardProps = {}) {
                   <p className="text-[0.875rem] text-white/50">
                     {meal.requested_by ? `Chosen by ${meal.requested_by}` : "Set by family"} · {meal.portions} pax
                   </p>
+                  {!readOnly && (
+                    <div>
+                      <label className="block text-[0.625rem] text-white/35 uppercase mb-1">Portions</label>
+                      <div className="flex gap-1.5">
+                        {[1, 2, 3, 4, 5, 6].map((n) => (
+                          <button key={n} type="button" onClick={() => setPortionSize(n)}
+                            className={`w-9 h-9 rounded-xl text-[0.8125rem] font-medium transition ${portionSize === n ? "bg-white/15 text-white/90 border border-white/20" : "bg-white/5 text-white/40 border border-white/[0.06]"}`}>
+                            {n}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   <div className="flex gap-2 pt-2">
                     {!readOnly && (
                       <button type="button" onClick={() => setShowPicker(true)}
@@ -371,7 +385,7 @@ export default function MealsCard({ readOnly = false }: MealsCardProps = {}) {
               ) : suggestion ? (
                 <div className="space-y-4">
                   {dishImage && (
-                    <img src={dishImage} alt={suggestion.meal} className="w-full h-36 object-cover rounded-2xl" />
+                    <img src={dishImage} alt={suggestion.meal} className="w-full h-36 object-cover rounded-2xl" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
                   )}
                   <div className="flex items-center gap-2">
                     <span className="ai-sparkle text-violet-300/80">&#10024;</span>
@@ -380,6 +394,19 @@ export default function MealsCard({ readOnly = false }: MealsCardProps = {}) {
                   <p className="text-[0.875rem] text-white/50">{suggestion.reason}</p>
                   {suggestion.missingIngredients.length > 0 && (
                     <p className="text-[0.8125rem] text-white/40">Missing: {suggestion.missingIngredients.join(", ")}</p>
+                  )}
+                  {!readOnly && (
+                    <div>
+                      <label className="block text-[0.625rem] text-white/35 uppercase mb-1">Portions</label>
+                      <div className="flex gap-1.5">
+                        {[1, 2, 3, 4, 5, 6].map((n) => (
+                          <button key={n} type="button" onClick={() => setPortionSize(n)}
+                            className={`w-9 h-9 rounded-xl text-[0.8125rem] font-medium transition ${portionSize === n ? "bg-white/15 text-white/90 border border-white/20" : "bg-white/5 text-white/40 border border-white/[0.06]"}`}>
+                            {n}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   )}
                   <div className="flex gap-2 pt-2">
                     {!readOnly && (

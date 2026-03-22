@@ -688,40 +688,53 @@ fastify.get("/api/integrations/hass/status", { preHandler: [requireAuth] }, asyn
   ok: true, connected: hassConfigured(), hassUrl: process.env.HASS_URL || "",
 }));
 
-// ---- Meal image search (Unsplash) ----
+// ---- Meal image search ----
 const mealImageCache = new Map();
 fastify.get("/api/meals/image", { preHandler: [requireAuth] }, async (request, reply) => {
   const dish = typeof request.query?.dish === "string" ? request.query.dish.trim() : "";
   if (!dish) return sendError(reply, 400, "dish required");
 
-  // Check cache
   if (mealImageCache.has(dish.toLowerCase())) {
     return reply.send({ ok: true, url: mealImageCache.get(dish.toLowerCase()) });
   }
 
   const unsplashKey = process.env.UNSPLASH_ACCESS_KEY;
-  if (!unsplashKey) {
-    // Fallback: use source.unsplash.com (no key needed, lower quality)
-    const url = `https://source.unsplash.com/400x300/?${encodeURIComponent(dish)}+food+dish`;
-    mealImageCache.set(dish.toLowerCase(), url);
-    return reply.send({ ok: true, url });
+
+  // Try Unsplash API if key exists
+  if (unsplashKey) {
+    try {
+      const controller = new AbortController();
+      const t = setTimeout(() => controller.abort(), 6000);
+      const res = await fetch(
+        `https://api.unsplash.com/search/photos?query=${encodeURIComponent(dish + " food")}&per_page=1&orientation=landscape`,
+        { headers: { Authorization: `Client-ID ${unsplashKey}` }, signal: controller.signal }
+      );
+      clearTimeout(t);
+      const data = await res.json();
+      const url = data?.results?.[0]?.urls?.regular || data?.results?.[0]?.urls?.small || null;
+      if (url) { mealImageCache.set(dish.toLowerCase(), url); return reply.send({ ok: true, url }); }
+    } catch { /* fall through */ }
   }
 
+  // Fallback: loremflickr (free, no key, follows redirect to actual image)
   try {
     const controller = new AbortController();
     const t = setTimeout(() => controller.abort(), 6000);
+    const keywords = encodeURIComponent(dish.replace(/[()]/g, "").split(" ").slice(0, 2).join(",") + ",food");
     const res = await fetch(
-      `https://api.unsplash.com/search/photos?query=${encodeURIComponent(dish + " food dish")}&per_page=1&orientation=landscape`,
-      { headers: { Authorization: `Client-ID ${unsplashKey}` }, signal: controller.signal }
+      `https://loremflickr.com/600/400/${keywords}`,
+      { redirect: "manual", signal: controller.signal }
     );
     clearTimeout(t);
-    const data = await res.json();
-    const url = data?.results?.[0]?.urls?.regular || data?.results?.[0]?.urls?.small || null;
-    if (url) mealImageCache.set(dish.toLowerCase(), url);
-    return reply.send({ ok: true, url: url || null });
-  } catch {
-    return reply.send({ ok: true, url: null });
-  }
+    const location = res.headers.get("location");
+    if (location) {
+      const fullUrl = location.startsWith("http") ? location : `https://loremflickr.com${location}`;
+      mealImageCache.set(dish.toLowerCase(), fullUrl);
+      return reply.send({ ok: true, url: fullUrl });
+    }
+  } catch { /* fall through */ }
+
+  return reply.send({ ok: true, url: null });
 });
 
 // ---- Music search (YouTube) ----
