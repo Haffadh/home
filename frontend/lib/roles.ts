@@ -141,8 +141,15 @@ export const ALL_ROOMS = [
   "Winklevi Room",
   "Mariam Room",
   "Outside",
-  "General",
+  "None",
 ] as const;
+
+/** Get the default room for the currently logged-in user */
+export function getDefaultRoom(): string {
+  if (typeof window === "undefined") return "None";
+  const role = getStoredRole();
+  return role ? (USER_DEFAULT_ROOM[role] || "None") : "None";
+}
 
 export const STORAGE_KEY = "shh_role";
 

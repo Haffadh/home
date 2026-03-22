@@ -8,6 +8,7 @@ import { useRealtimeEvent } from "../../context/RealtimeContext";
 import { runMealIntelligenceForSlot } from "../../../lib/meals/runMealIntelligence";
 import type { MealSuggestionResult } from "../../../lib/meals/runMealIntelligence";
 import { BREAKFAST_ITEMS, LUNCH_ITEMS, DINNER_ITEMS, DISH_SUB_OPTIONS, SOUP_ITEMS, LUNCH_ITEMS_BY_PROTEIN } from "../../../data/menu";
+import { MEAL_INGREDIENTS } from "../../../lib/meals/mealIngredients";
 
 type MealSlot = "breakfast" | "lunch" | "dinner";
 const MENU_BY_SLOT: Record<MealSlot, readonly string[]> = {
@@ -48,6 +49,15 @@ export default function MealsCard({ readOnly = false }: MealsCardProps = {}) {
   const [showPhotoUpload, setShowPhotoUpload] = useState(false);
   const [subOptions, setSubOptions] = useState<{ dish: string; step: number; choices: string[] } | null>(null);
   const [portionSize, setPortionSize] = useState(6);
+  const [inventoryNames, setInventoryNames] = useState<Set<string>>(new Set());
+
+  // Load inventory names for availability check
+  useEffect(() => {
+    getApiBase("/api/inventory").then((data) => {
+      const items = (data as { items?: { name: string }[] })?.items ?? [];
+      setInventoryNames(new Set(items.map((i) => i.name.toLowerCase())));
+    }).catch(() => {});
+  }, []);
   const photoRef = useRef<HTMLInputElement>(null);
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Long press
@@ -107,6 +117,30 @@ export default function MealsCard({ readOnly = false }: MealsCardProps = {}) {
       setShowPhotoUpload(false);
     };
     reader.readAsDataURL(file);
+  }
+
+  function getDishAvailability(dish: string): { available: boolean; missing: string[] } {
+    const ingredients = MEAL_INGREDIENTS[dish];
+    if (!ingredients || inventoryNames.size === 0) return { available: true, missing: [] };
+    const missing = ingredients.filter((ing) => !inventoryNames.has(ing.toLowerCase()));
+    return { available: missing.length === 0, missing };
+  }
+
+  function DishButton({ dish, slot }: { dish: string; slot: MealSlot }) {
+    const { available, missing } = getDishAvailability(dish);
+    return (
+      <button type="button" onClick={() => handleDishWithSubOptions(slot, dish)} disabled={accepting}
+        className="w-full text-left rounded-xl px-3.5 py-2.5 text-[0.875rem] text-white/80 hover:bg-white/10 transition flex items-center justify-between gap-2">
+        <span className="truncate">{dish}</span>
+        {available ? (
+          <span className="shrink-0 text-[0.5625rem] text-emerald-400/60">Ready</span>
+        ) : (
+          <span className="shrink-0 text-[0.5625rem] text-amber-400/60" title={`Missing: ${missing.join(", ")}`}>
+            {missing.length} missing
+          </span>
+        )}
+      </button>
+    );
   }
 
   function handleDishWithSubOptions(slot: MealSlot, dish: string) {
@@ -334,8 +368,7 @@ export default function MealsCard({ readOnly = false }: MealsCardProps = {}) {
                           <>
                             <p className="text-[0.625rem] text-white/35 uppercase tracking-wider pt-2 pb-1 px-1">Appetizers</p>
                             {([...SOUP_ITEMS] as string[]).map((dish) => (
-                              <button key={dish} type="button" onClick={() => handleDishWithSubOptions(modalSlot, dish)} disabled={accepting}
-                                className="w-full text-left rounded-xl px-3.5 py-2.5 text-[0.875rem] text-white/80 hover:bg-white/10 transition truncate">{dish}</button>
+                              <DishButton key={dish} dish={dish} slot={modalSlot} />
                             ))}
                           </>
                         )}
@@ -343,8 +376,7 @@ export default function MealsCard({ readOnly = false }: MealsCardProps = {}) {
                           <div key={protein}>
                             <p className="text-[0.625rem] text-white/35 uppercase tracking-wider pt-3 pb-1 px-1">{protein}</p>
                             {([...dishes] as string[]).map((dish) => (
-                              <button key={dish} type="button" onClick={() => handleDishWithSubOptions(modalSlot, dish)} disabled={accepting}
-                                className="w-full text-left rounded-xl px-3.5 py-2.5 text-[0.875rem] text-white/80 hover:bg-white/10 transition truncate">{dish}</button>
+                              <DishButton key={dish} dish={dish} slot={modalSlot} />
                             ))}
                           </div>
                         ))}

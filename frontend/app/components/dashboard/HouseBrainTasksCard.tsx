@@ -12,12 +12,12 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import GlassCard from "./GlassCard";
-import { getCategoryIcon } from "../../../lib/taskCategories";
+import { getCategoryIcon, getCategoryLabel } from "../../../lib/taskCategories";
 import { TASK_CATEGORIES } from "../../../lib/taskCategories";
 import { useRealtimeEvent } from "../../context/RealtimeContext";
 import { getApiBase, withActorBody } from "../../../lib/api";
 import { formatTaskTimeRange } from "../../../lib/scheduling/formatTaskTimeRange";
-import { getStoredRole, USER_DEFAULT_ROOM, ALL_ROOMS } from "../../../lib/roles";
+import { getDefaultRoom, ALL_ROOMS } from "../../../lib/roles";
 
 const LONG_PRESS_MS = 600;
 
@@ -126,7 +126,7 @@ function TaskActionModal({
       <div className="relative w-full max-w-sm rounded-[28px] p-6 animate-modal-in" style={glassModalStyle} onClick={(e) => e.stopPropagation()}>
         <h3 className="text-lg font-semibold text-white/95 mb-1 pr-8">{task.title}</h3>
         <p className="text-[0.75rem] text-white/40 mb-4">
-          {getCategoryIcon(task.category ?? "misc")} {task.category ?? "misc"}
+          {getCategoryIcon(task.category ?? "misc")} {getCategoryLabel(task.category ?? "misc")}
           {task.room ? ` · ${task.room}` : ""}
           {task.assignedBy ? ` · by ${task.assignedBy}` : ""}
         </p>
@@ -407,10 +407,9 @@ export default function HouseBrainTasksCard({
   const [newCategory, setNewCategory] = useState("misc");
   const [newDuration, setNewDuration] = useState(30);
   const [newTime, setNewTime] = useState("");
-  const [newRoom, setNewRoom] = useState(() => {
-    const role = typeof window !== "undefined" ? getStoredRole() : null;
-    return role ? (USER_DEFAULT_ROOM[role] || "General") : "General";
-  });
+  const [newRoom, setNewRoom] = useState("None");
+  // Set default room from logged-in user after mount
+  useEffect(() => { setNewRoom(getDefaultRoom()); }, []);
   const [adding, setAdding] = useState(false);
   const scrollRef = useRef<HTMLUListElement>(null);
   const [fadeTop, setFadeTop] = useState(false);
@@ -635,9 +634,10 @@ export default function HouseBrainTasksCard({
     setAdding(true);
     try {
       const today = new Date().toISOString().slice(0, 10);
+      const roomVal = newRoom === "None" ? undefined : newRoom;
       const taskBody = newTime
-        ? { title: t, date: today, startTime: newTime, durationMinutes: newDuration, category: newCategory, room: newRoom }
-        : { title: t, date: today, timeWindow: "auto", durationMinutes: newDuration, category: newCategory, room: newRoom };
+        ? { title: t, date: today, startTime: newTime, durationMinutes: newDuration, category: newCategory, room: roomVal }
+        : { title: t, date: today, timeWindow: "auto", durationMinutes: newDuration, category: newCategory, room: roomVal };
       await getApiBase("/api/tasks", {
         method: "POST",
         body: withActorBody(taskBody),
