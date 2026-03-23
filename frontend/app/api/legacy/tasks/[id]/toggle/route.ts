@@ -6,10 +6,10 @@ import {
   errorResponse,
 } from "@/lib/server/middleware";
 
-type RouteParams = { params: Promise<{ taskId: string }> };
+type RouteParams = { params: Promise<{ id: string }> };
 
 /**
- * PATCH /api/legacy/tasks/[taskId]/toggle
+ * PATCH /api/legacy/tasks/[id]/toggle
  * Toggle is_done on a legacy task.
  */
 export async function PATCH(request: Request, { params }: RouteParams) {
@@ -17,7 +17,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
   if (isAuthError(auth)) return auth;
 
   try {
-    const { taskId } = await params;
+    const { id } = await params;
 
     const db = getDb();
 
@@ -25,7 +25,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     const { data: current, error: fetchErr } = await db
       .from("tasks")
       .select("is_done")
-      .eq("id", taskId)
+      .eq("id", id)
       .single();
 
     if (fetchErr) throw fetchErr;
@@ -37,7 +37,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     const { data, error } = await db
       .from("tasks")
       .update({ is_done: !current.is_done })
-      .eq("id", taskId)
+      .eq("id", id)
       .select()
       .single();
 

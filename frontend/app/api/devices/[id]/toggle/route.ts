@@ -5,12 +5,12 @@ import { logActivity } from "@/lib/server/activityLog";
 
 async function handleToggle(
   request: NextRequest,
-  { params }: { params: Promise<{ deviceId: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = authenticateRequest(request);
   if (isAuthError(auth)) return auth;
 
-  const { deviceId } = await params;
+  const { id } = await params;
   const body = await parseBody(request);
 
   if (typeof body.on !== "boolean") {
@@ -18,7 +18,7 @@ async function handleToggle(
   }
 
   try {
-    const device = await setDeviceState(deviceId, { switch: body.on });
+    const device = await setDeviceState(id, { switch: body.on });
 
     const { actor_role, actor_name } = getActor(request, body);
     await logActivity({
@@ -26,7 +26,7 @@ async function handleToggle(
       actor_name,
       action: body.on ? "turned_on" : "turned_off",
       entity_type: "device",
-      entity_id: deviceId,
+      entity_id: id,
       payload_json: { on: body.on },
     });
 
@@ -38,14 +38,14 @@ async function handleToggle(
 
 export async function POST(
   request: NextRequest,
-  ctx: { params: Promise<{ deviceId: string }> }
+  ctx: { params: Promise<{ id: string }> }
 ) {
   return handleToggle(request, ctx);
 }
 
 export async function PATCH(
   request: NextRequest,
-  ctx: { params: Promise<{ deviceId: string }> }
+  ctx: { params: Promise<{ id: string }> }
 ) {
   return handleToggle(request, ctx);
 }

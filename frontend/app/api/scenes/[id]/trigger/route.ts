@@ -11,21 +11,21 @@ import { logActivity } from "@/lib/server/activityLog";
 import { runScene } from "@/lib/server/services/sceneService";
 
 /**
- * POST /api/scenes/[sceneId]/trigger
- * Trigger a scene's actions (alias for run using sceneId param).
+ * POST /api/scenes/[id]/trigger
+ * Trigger a scene's actions (alias for run using id param).
  */
 export async function POST(
   request: Request,
-  { params }: { params: Promise<{ sceneId: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = authenticateRequest(request);
   if (isAuthError(auth)) return auth;
 
   try {
-    const { sceneId } = await params;
+    const { id } = await params;
     const body = await parseBody(request);
 
-    const result = await runScene(sceneId, {
+    const result = await runScene(id, {
       createUrgentTask: async (opts: { title: string; assigned_to?: number | null }) => {
         const db = getDb();
         const { data } = await db
@@ -43,7 +43,7 @@ export async function POST(
 
     return NextResponse.json({
       ...result,
-      sceneId,
+      id,
     });
   } catch (err) {
     return errorResponse(500, (err as Error).message);
