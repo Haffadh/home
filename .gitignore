@@ -144,6 +144,8 @@ node_modules/
 *.zip
 
 backend/.env
-frontend/.env.localbackend/smart-home.db
+frontend/.env.local
+backend/smart-home.db
 .DS_Store
 .vercel
+.env.vercel
