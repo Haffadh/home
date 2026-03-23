@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { getStoredRole, ACTOR_NAME, USER_DEFAULT_ROOM } from "../../../lib/roles";
+import { getStoredRole, ACTOR_NAME } from "../../../lib/roles";
 import type { Role } from "../../../lib/roles";
 import { getVisibleScenes } from "../../../lib/sceneVisibility";
 import { useSceneTrigger } from "../DashboardShell";
@@ -21,15 +21,6 @@ function getGreeting(): string {
   if (hour < 17) return "Good afternoon";
   if (hour < 21) return "Good evening";
   return "Good night";
-}
-
-function getGreetingEmoji(): string {
-  const hour = new Date().getHours();
-  if (hour < 5) return "🌙";
-  if (hour < 12) return "☀️";
-  if (hour < 17) return "🌤️";
-  if (hour < 21) return "🌆";
-  return "🌙";
 }
 
 /* ── Component ────────────────────────────────────────────────────────────── */
@@ -61,42 +52,46 @@ export default function FamilyDashboard() {
   const visibleScenes = getVisibleScenes(scenes, role);
 
   return (
-    <div className="w-full pb-20 relative">
+    <div className="w-full pb-24 relative">
 
-      {/* ── Hero Greeting ─────────────────────────────────────────────── */}
-      <div
-        className="relative px-6 pt-6 pb-8"
-        style={{
-          background: "linear-gradient(180deg, rgba(59,130,246,0.06) 0%, transparent 100%)",
-        }}
-      >
+      {/* ── Hero ──────────────────────────────────────────────────────── */}
+      <div className="relative px-6 pt-8 pb-10 overflow-hidden">
+        {/* Ambient glow */}
         <div
-          className="animate-fade-in-up opacity-0"
-          style={{ animationDelay: "0.05s" }}
-        >
-          <p className="text-[0.8125rem] text-white/40 mb-1">{getGreetingEmoji()} {getGreeting()}</p>
-          <h1 className="text-[2rem] font-bold text-white tracking-tight leading-none">
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background: `
+              radial-gradient(ellipse 80% 60% at 30% 0%, rgba(120,180,255,0.07) 0%, transparent 70%),
+              radial-gradient(ellipse 60% 50% at 80% 10%, rgba(180,140,255,0.05) 0%, transparent 60%)
+            `,
+          }}
+        />
+        <div className="relative animate-fade-in-up opacity-0" style={{ animationDelay: "0.05s" }}>
+          <p className="text-[0.8125rem] font-medium text-white/35 tracking-wide uppercase mb-2">
+            {getGreeting()}
+          </p>
+          <h1 className="text-[2.25rem] font-bold text-white tracking-tight leading-[1.1]">
             {displayName}
           </h1>
         </div>
       </div>
 
-      {/* ── Scene toast ───────────────────────────────────────────────── */}
+      {/* ── Scene feedback ────────────────────────────────────────────── */}
       {sceneMessage && (
-        <div className="mx-6 mb-4 rounded-2xl bg-emerald-500/10 border border-emerald-400/20 px-4 py-3 text-[0.8125rem] text-emerald-300/90 text-center animate-fade-in-up">
+        <div className="mx-6 mb-5 liquid-glass rounded-2xl px-4 py-3 text-[0.8125rem] text-white/80 text-center animate-fade-in-up">
           {sceneMessage}
         </div>
       )}
 
       {/* ── Scenes ────────────────────────────────────────────────────── */}
-      <section
-        className="mb-6 animate-fade-in-up opacity-0"
-        style={{ animationDelay: "0.1s" }}
-      >
+      <section className="mb-8 animate-fade-in-up opacity-0" style={{ animationDelay: "0.12s" }}>
         {scenesLoading ? (
-          <div className="flex gap-3 px-6">
+          <div className="flex gap-3 pl-6 pr-6">
             {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="shrink-0 w-20 h-20 rounded-[1.25rem] bg-white/[0.04] animate-pulse" />
+              <div
+                key={i}
+                className="shrink-0 w-[4.5rem] h-[4.5rem] rounded-2xl liquid-glass-subtle animate-pulse"
+              />
             ))}
           </div>
         ) : visibleScenes.length > 0 && (
@@ -110,16 +105,18 @@ export default function FamilyDashboard() {
                   type="button"
                   onClick={() => triggerScene(s.id)}
                   disabled={activatingId !== null && activatingId !== s.id}
-                  className={`shrink-0 group relative flex flex-col items-center justify-center w-20 h-20 rounded-[1.25rem] transition-all duration-300 active:scale-[0.9] disabled:opacity-30 ${
+                  className={`shrink-0 group relative flex flex-col items-center justify-center w-[4.5rem] h-[4.5rem] rounded-2xl transition-all duration-500 active:scale-[0.88] disabled:opacity-25 ${
                     isActive
-                      ? "bg-gradient-to-br from-emerald-500/20 to-emerald-600/10 shadow-[0_0_20px_rgba(52,211,153,0.2)] ring-1 ring-emerald-400/30"
-                      : "bg-white/[0.04] hover:bg-white/[0.08]"
+                      ? "liquid-glass-active shadow-[0_0_24px_rgba(255,255,255,0.06)]"
+                      : "liquid-glass-subtle hover:border-white/15"
                   }`}
                 >
-                  <span className={`text-[1.5rem] leading-none transition-transform duration-300 ${isLoading ? "animate-pulse scale-75" : "group-hover:scale-110"}`}>
+                  <span className={`text-[1.375rem] leading-none transition-all duration-500 ${
+                    isLoading ? "liquid-pulse scale-90" : "group-hover:scale-110 group-active:scale-95"
+                  }`}>
                     {s.icon}
                   </span>
-                  <span className="text-[0.625rem] font-medium text-white/60 mt-1.5 text-center leading-tight px-1 line-clamp-2">
+                  <span className="text-[0.5625rem] font-medium text-white/50 mt-1.5 text-center leading-tight px-0.5 line-clamp-1">
                     {s.name}
                   </span>
                 </button>
@@ -129,30 +126,18 @@ export default function FamilyDashboard() {
         )}
       </section>
 
-      {/* ── Cards ─────────────────────────────────────────────────────── */}
-      <div className="px-4 space-y-4">
+      {/* ── Content ───────────────────────────────────────────────────── */}
+      <div className="px-5 space-y-5">
 
-        {/* Meals */}
-        <div
-          className="animate-fade-in-up opacity-0"
-          style={{ animationDelay: "0.15s" }}
-        >
+        <div className="animate-fade-in-up opacity-0" style={{ animationDelay: "0.18s" }}>
           <MealsCard readOnly={false} canEditTasks={false} />
         </div>
 
-        {/* Tasks */}
-        <div
-          className="animate-fade-in-up opacity-0"
-          style={{ animationDelay: "0.2s" }}
-        >
+        <div className="animate-fade-in-up opacity-0" style={{ animationDelay: "0.24s" }}>
           <HouseBrainTasksCard readOnly={false} title="Today" />
         </div>
 
-        {/* Urgent */}
-        <div
-          className="animate-fade-in-up opacity-0"
-          style={{ animationDelay: "0.25s" }}
-        >
+        <div className="animate-fade-in-up opacity-0" style={{ animationDelay: "0.3s" }}>
           <UrgentTasksCard canEditTasks={true} readOnly={false} simplified />
         </div>
       </div>
