@@ -678,13 +678,13 @@ export default function HouseBrainTasksCard({
                 {adding ? "…" : "Add"}
               </button>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <select value={newCategory} onChange={(e) => setNewCategory(e.target.value)}
-                className="rounded-xl border border-white/10 bg-white/5 px-2 py-1.5 text-[0.75rem] text-white/70 outline-none">
+                className="min-w-0 shrink-0 rounded-xl border border-white/10 bg-white/5 px-2 py-1.5 text-[0.75rem] text-white/70 outline-none">
                 {TASK_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.icon} {c.label}</option>)}
               </select>
               <select value={newDuration} onChange={(e) => setNewDuration(Number(e.target.value))}
-                className="rounded-xl border border-white/10 bg-white/5 px-2 py-1.5 text-[0.75rem] text-white/70 outline-none">
+                className="min-w-0 shrink-0 rounded-xl border border-white/10 bg-white/5 px-2 py-1.5 text-[0.75rem] text-white/70 outline-none">
                 <option value={15}>15m</option>
                 <option value={30}>30m</option>
                 <option value={45}>45m</option>
@@ -693,10 +693,10 @@ export default function HouseBrainTasksCard({
                 <option value={120}>2h</option>
               </select>
               <input type="time" value={newTime} onChange={(e) => setNewTime(e.target.value)}
-                className="rounded-xl border border-white/10 bg-white/5 px-2 py-1.5 text-[0.75rem] text-white/70 outline-none"
+                className="min-w-[5.5rem] shrink-0 rounded-xl border border-white/10 bg-white/5 px-2 py-1.5 text-[0.75rem] text-white/70 outline-none"
                 placeholder="Auto" title={newTime ? `Start at ${newTime}` : "Auto-schedule"} />
               <select value={newRoom} onChange={(e) => setNewRoom(e.target.value)}
-                className="rounded-xl border border-white/10 bg-white/5 px-2 py-1.5 text-[0.75rem] text-white/70 outline-none">
+                className="min-w-0 shrink-0 rounded-xl border border-white/10 bg-white/5 px-2 py-1.5 text-[0.75rem] text-white/70 outline-none">
                 {ALL_ROOMS.map((r) => <option key={r} value={r}>{r}</option>)}
               </select>
             </div>

@@ -1,11 +1,10 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
-import { getBaseUrl } from "../../lib/api";
 
 type RealtimeContextValue = {
   connected: boolean;
-  /** Manually trigger a refetch event (e.g. after socket was down) */
+  /** Manually trigger a refetch event (e.g. after a mutation) */
   notify: (event: string) => void;
 };
 
@@ -19,70 +18,35 @@ function dispatchRealtime(event: string, payload: Record<string, unknown> = {}) 
   window.dispatchEvent(new CustomEvent(REALTIME_EVENT, { detail: { event, ...payload } }));
 }
 
+/**
+ * Polling-based realtime provider.
+ * WebSocket was removed because Vercel serverless doesn't support persistent WS connections.
+ * Dispatches periodic refresh events so components stay in sync.
+ */
 export function RealtimeProvider({ children }: { children: React.ReactNode }) {
-  const [connected, setConnected] = useState(false);
-  const wsRef = useRef<WebSocket | null>(null);
+  const [connected, setConnected] = useState(true);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const connect = useCallback(() => {
-    if (typeof window === "undefined") return;
-
-    const wsUrl = getBaseUrl().replace(/^http/, "ws") + "/ws";
-
-    try {
-      const ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
-
-      ws.onopen = () => {
-        setConnected(true);
-        if (pollRef.current) {
-          clearInterval(pollRef.current);
-          pollRef.current = null;
-        }
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data && typeof data.event === "string") {
-            const { event: ev, ...payload } = data;
-            dispatchRealtime(ev, payload);
-          }
-        } catch {
-          // ignore non-JSON or invalid
-        }
-      };
-
-      ws.onclose = () => {
-        setConnected(false);
-        wsRef.current = null;
-        // Auto-reconnect after 3s
-        if (reconnectRef.current) clearTimeout(reconnectRef.current);
-        reconnectRef.current = setTimeout(() => connect(), 3000);
-      };
-    } catch (err) {
-      console.error("WS connection failed:", err);
-    }
-  }, []);
 
   useEffect(() => {
-    connect();
+    setConnected(true);
+
+    // Poll: dispatch generic refresh events periodically
+    pollRef.current = setInterval(() => {
+      dispatchRealtime("tasks_updated");
+      dispatchRealtime("urgent_updated");
+      dispatchRealtime("groceries_updated");
+      dispatchRealtime("devices_updated");
+      dispatchRealtime("inventory_updated");
+      dispatchRealtime("meals_updated");
+    }, POLL_INTERVAL_MS);
+
     return () => {
-      if (wsRef.current) {
-        wsRef.current.close();
-        wsRef.current = null;
-      }
       if (pollRef.current) {
         clearInterval(pollRef.current);
         pollRef.current = null;
       }
-      if (reconnectRef.current) {
-        clearTimeout(reconnectRef.current);
-        reconnectRef.current = null;
-      }
     };
-  }, [connect]);
+  }, []);
 
   const notify = useCallback((event: string) => {
     dispatchRealtime(event, {});

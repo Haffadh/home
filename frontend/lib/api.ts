@@ -8,7 +8,7 @@ import { getSupabaseClient } from "./supabaseClient";
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE ||
   process.env.NEXT_PUBLIC_API_BASE_URL ||
-  "http://127.0.0.1:4000";
+  "";
 
 const STORAGE_KEY_ROLE = "shh_role";
 const STORAGE_KEY_ACTOR_NAME = "shh_actor_name";
