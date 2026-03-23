@@ -396,7 +396,7 @@ export default function SceneEditorModal({ scene, devices, onClose, onSave, defa
 
         {/* House-wide confirmation */}
         {showHouseConfirm && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/60 rounded-3xl">
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60">
             <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6 max-w-sm mx-4 text-center space-y-4">
               <p className="text-lg text-white/90">Create house-wide scene?</p>
               <p className="text-sm text-white/60">
