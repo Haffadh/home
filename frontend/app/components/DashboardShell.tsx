@@ -210,7 +210,7 @@ export default function DashboardShell({
       </aside>
 
       <div className="flex-1 flex flex-col min-w-0 min-h-0 relative z-10">
-        <header className="relative h-24 shrink-0 flex items-center justify-between gap-6 px-4 md:px-8 py-4">
+        <header className={`relative shrink-0 flex items-center justify-between gap-6 px-4 md:px-8 py-4 ${isFamilyPanel ? "h-14" : "h-24"}`}>
           <div
             className="absolute inset-0 pointer-events-none"
             style={{
@@ -239,57 +239,59 @@ export default function DashboardShell({
             </Link>
           </div>
 
-          <div className="relative flex items-center gap-3 md:gap-5 shrink-0">
-            <MusicControl />
-            <NotificationBell />
-            <div className="flex flex-col items-end gap-0.5">
-              <span className="text-[0.875rem] uppercase tracking-wide text-white/50">
-                {now
-                  ? now.toLocaleDateString(undefined, { weekday: "long" })
-                  : "—"}
-              </span>
-              <span className="text-[1rem] font-medium text-white/80">
-                {now
-                  ? now.toLocaleDateString(undefined, {
-                      year: "numeric",
-                      month: "long",
-                      day: "numeric",
-                    })
-                  : "—"}
-              </span>
-              <span
-                className="text-3xl font-bold tabular-nums text-white/95 min-w-[9rem] text-right"
-                style={{ fontVariantNumeric: "tabular-nums" }}
-              >
-                {now
-                  ? now.toLocaleTimeString(undefined, {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                      second: "2-digit",
-                    })
-                  : "—:—:—"}
-              </span>
-            </div>
-            <div className="flex items-center gap-2 rounded-full bg-[#0f172a]/70 px-4 py-2 backdrop-blur-xl border border-white/10 shadow-[0_4px_24px_rgba(0,0,0,0.12)]">
-              {weather ? (
-                <>
-                  <span className="text-xl leading-none opacity-80" aria-hidden>
-                    {weatherIcon(weather.icon)}
-                  </span>
-                  <div className="flex flex-col items-start leading-tight">
-                    <span className="text-lg font-bold tabular-nums text-white/90">
-                      {weather.tempC}°
+          {!isFamilyPanel && (
+            <div className="relative flex items-center gap-3 md:gap-5 shrink-0">
+              <MusicControl />
+              <NotificationBell />
+              <div className="flex flex-col items-end gap-0.5">
+                <span className="text-[0.875rem] uppercase tracking-wide text-white/50">
+                  {now
+                    ? now.toLocaleDateString(undefined, { weekday: "long" })
+                    : "—"}
+                </span>
+                <span className="text-[1rem] font-medium text-white/80">
+                  {now
+                    ? now.toLocaleDateString(undefined, {
+                        year: "numeric",
+                        month: "long",
+                        day: "numeric",
+                      })
+                    : "—"}
+                </span>
+                <span
+                  className="text-3xl font-bold tabular-nums text-white/95 min-w-[9rem] text-right"
+                  style={{ fontVariantNumeric: "tabular-nums" }}
+                >
+                  {now
+                    ? now.toLocaleTimeString(undefined, {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        second: "2-digit",
+                      })
+                    : "—:—:—"}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 rounded-full bg-[#0f172a]/70 px-4 py-2 backdrop-blur-xl border border-white/10 shadow-[0_4px_24px_rgba(0,0,0,0.12)]">
+                {weather ? (
+                  <>
+                    <span className="text-xl leading-none opacity-80" aria-hidden>
+                      {weatherIcon(weather.icon)}
                     </span>
-                    <span className="text-[0.875rem] text-white/50">
-                      {weather.condition}
-                    </span>
-                  </div>
-                </>
-              ) : (
-                <span className="text-sm text-white/40">—°</span>
-              )}
+                    <div className="flex flex-col items-start leading-tight">
+                      <span className="text-lg font-bold tabular-nums text-white/90">
+                        {weather.tempC}°
+                      </span>
+                      <span className="text-[0.875rem] text-white/50">
+                        {weather.condition}
+                      </span>
+                    </div>
+                  </>
+                ) : (
+                  <span className="text-sm text-white/40">—°</span>
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </header>
 
         <main className={`flex-1 min-h-0 ${isHome && !isFamilyPanel ? "overflow-hidden" : "overflow-auto"}`}>
