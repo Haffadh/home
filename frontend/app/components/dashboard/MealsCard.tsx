@@ -60,25 +60,11 @@ export default function MealsCard({ readOnly = false }: MealsCardProps = {}) {
   }, []);
   const photoRef = useRef<HTMLInputElement>(null);
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Long press
-  const pressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [isLongPress, setIsLongPress] = useState(false);
-
-  function handlePressStart(slot: MealSlot) {
-    setIsLongPress(false);
-    if (pressTimerRef.current) clearTimeout(pressTimerRef.current);
-    pressTimerRef.current = setTimeout(() => {
-      setIsLongPress(true);
-      setModalSlot(slot);
-      setShowPicker(false);
-      setPickerSearch("");
-      pressTimerRef.current = null;
-    }, 500);
+  function openMealModal(slot: MealSlot) {
+    setModalSlot(slot);
+    setShowPicker(false);
+    setPickerSearch("");
   }
-  function handlePressEnd() {
-    if (pressTimerRef.current) { clearTimeout(pressTimerRef.current); pressTimerRef.current = null; }
-  }
-  useEffect(() => { return () => { if (pressTimerRef.current) clearTimeout(pressTimerRef.current); }; }, []);
 
   // Load dish image when modal opens
   useEffect(() => {
@@ -270,12 +256,7 @@ export default function MealsCard({ readOnly = false }: MealsCardProps = {}) {
               <div key={key}>
                 <button
                   type="button"
-                  onMouseDown={() => handlePressStart(key)}
-                  onMouseUp={handlePressEnd}
-                  onMouseLeave={handlePressEnd}
-                  onTouchStart={() => handlePressStart(key)}
-                  onTouchEnd={handlePressEnd}
-                  onContextMenu={(e) => e.preventDefault()}
+                  onClick={() => openMealModal(key)}
                   className="w-full text-left relative rounded-3xl border border-white/[0.06] p-5 backdrop-blur-xl transition-all duration-300 ease-out hover:-translate-y-1 hover:scale-[1.01]"
                   style={{
                     background: suggestion

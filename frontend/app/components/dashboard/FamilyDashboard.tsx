@@ -61,8 +61,8 @@ export default function FamilyDashboard() {
           className="absolute inset-0 pointer-events-none"
           style={{
             background: `
-              radial-gradient(ellipse 80% 60% at 30% 0%, rgba(120,180,255,0.07) 0%, transparent 70%),
-              radial-gradient(ellipse 60% 50% at 80% 10%, rgba(180,140,255,0.05) 0%, transparent 60%)
+              radial-gradient(ellipse 80% 60% at 30% 0%, rgba(168,85,247,0.08) 0%, transparent 70%),
+              radial-gradient(ellipse 60% 50% at 80% 10%, rgba(251,191,36,0.04) 0%, transparent 60%)
             `,
           }}
         />

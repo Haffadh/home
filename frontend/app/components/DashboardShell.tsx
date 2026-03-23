@@ -214,7 +214,7 @@ export default function DashboardShell({
           <div
             className="absolute inset-0 pointer-events-none"
             style={{
-              background: "radial-gradient(ellipse 100% 120% at 50% -20%, rgba(59, 130, 246, 0.08), transparent 60%)",
+              background: "radial-gradient(ellipse 100% 120% at 50% -20%, rgba(139, 92, 246, 0.08), transparent 60%)",
             }}
           />
           <div className="relative flex items-center gap-4 min-w-0">
@@ -233,7 +233,7 @@ export default function DashboardShell({
               onClick={pathname === "/" ? undefined : closeSidebar}
               className="block min-w-0"
             >
-              <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent truncate">
+              <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-purple-400 via-violet-300 to-amber-300 bg-clip-text text-transparent truncate">
                 {roomName ?? "Haffadh Home"}
               </h1>
             </Link>

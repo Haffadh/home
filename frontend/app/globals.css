@@ -1,9 +1,9 @@
 @import "tailwindcss";
 
 :root {
-  --background: #070B14;
-  --foreground: #e8ecf0;
-  --accent: #6EA8FF;
+  --background: #0A0A12;
+  --foreground: #f0ece8;
+  --accent: #C4A1FF;
   --glass-bg: rgba(255, 255, 255, 0.035);
   --glass-border: rgba(255, 255, 255, 0.06);
   --font-sans: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
@@ -62,9 +62,10 @@ html.home-no-scroll body {
 
 body {
   background:
-    radial-gradient(circle at 20% 10%, #1e3a8a 0%, transparent 40%),
-    radial-gradient(circle at 80% 20%, #2563eb 0%, transparent 40%),
-    linear-gradient(to bottom, #020617, #020617);
+    radial-gradient(ellipse 80% 50% at 20% 10%, rgba(88, 28, 135, 0.3) 0%, transparent 50%),
+    radial-gradient(ellipse 60% 40% at 80% 15%, rgba(124, 58, 237, 0.15) 0%, transparent 50%),
+    radial-gradient(ellipse 50% 30% at 60% 80%, rgba(217, 119, 6, 0.06) 0%, transparent 50%),
+    linear-gradient(to bottom, #0A0A12, #0D0D18);
   min-height: 100vh;
   color: white;
   font-family: var(--font-sans);
@@ -73,17 +74,18 @@ body {
 
 html.dark,
 html.dark body {
-  --background: #070B14;
-  --foreground: #e8ecf0;
-  background: #070B14;
-  color: #e8ecf0;
+  --background: #0A0A12;
+  --foreground: #f0ece8;
+  background: #0A0A12;
+  color: #f0ece8;
 }
 
 html.dark body {
   background:
-    radial-gradient(circle at 20% 10%, #1e3a8a 0%, transparent 40%),
-    radial-gradient(circle at 80% 20%, #2563eb 0%, transparent 40%),
-    linear-gradient(to bottom, #020617, #020617);
+    radial-gradient(ellipse 80% 50% at 20% 10%, rgba(88, 28, 135, 0.3) 0%, transparent 50%),
+    radial-gradient(ellipse 60% 40% at 80% 15%, rgba(124, 58, 237, 0.15) 0%, transparent 50%),
+    radial-gradient(ellipse 50% 30% at 60% 80%, rgba(217, 119, 6, 0.06) 0%, transparent 50%),
+    linear-gradient(to bottom, #0A0A12, #0D0D18);
   min-height: 100vh;
   color: #fff;
 }
