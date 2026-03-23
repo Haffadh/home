@@ -4,25 +4,22 @@ import { useEffect, useState } from "react";
 import type {
   Scene,
   SceneAction,
-  SceneSchedule,
   DeviceCommandAction,
-  TaskCreateAction,
   MusicModeAction,
 } from "../../../lib/services/scenes";
 import type { Device } from "../../../lib/services/devices";
 
-const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
-const ICON_OPTIONS = ["✨", "🌙", "🚪", "🎬", "🚿", "💡", "❄️", "🪟", "🍷", "🏠"];
+const ICON_OPTIONS = ["✨", "🌙", "🚪", "🎬", "🚿", "💡", "❄️", "🪟", "🍷", "🏠", "☀️"];
 const MUSIC_MODES = ["on", "off", "stop"] as const;
 const FAN_SPEEDS = ["low", "mid", "high", "auto"] as const;
-
-function normalizeTime(t: string | undefined): string {
-  if (!t || typeof t !== "string") return "22:00";
-  const parts = t.trim().split(":");
-  const h = Math.min(23, Math.max(0, parseInt(parts[0], 10) || 0));
-  const m = Math.min(59, Math.max(0, parseInt(parts[1], 10) || 0));
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-}
+const SCENE_ROOMS = [
+  "Kitchen",
+  "Living Room",
+  "Dining Room",
+  "Master Bedroom",
+  "Winklevi Room",
+  "Mariam Room",
+] as const;
 
 type DeviceCommandKind = "switch" | "brightness" | "temperature" | "fanSpeed" | "blindsOpen";
 
@@ -30,12 +27,17 @@ type Props = {
   scene: Scene | null;
   devices: Device[];
   onClose: () => void;
-  onSave: (payload: { name: string; icon: string; description: string; actions: SceneAction[]; schedule: SceneSchedule | null }) => Promise<void>;
+  onSave: (payload: {
+    name: string;
+    icon: string;
+    description: string;
+    actions: SceneAction[];
+    schedule: null;
+    scope: "room" | "house";
+    room: string | null;
+  }) => Promise<void>;
+  defaultRoom?: string | null;
 };
-
-function emptySchedule(): SceneSchedule {
-  return { enabled: false, time: "22:00", daysOfWeek: [] };
-}
 
 function defaultAction(type: "device_command" | "task_create" | "music_mode"): SceneAction {
   if (type === "device_command") {
@@ -47,65 +49,81 @@ function defaultAction(type: "device_command" | "task_create" | "music_mode"): S
   return { type: "music_mode", mode: "stop" };
 }
 
-export default function SceneEditorModal({ scene, devices, onClose, onSave }: Props) {
+export default function SceneEditorModal({ scene, devices, onClose, onSave, defaultRoom }: Props) {
+  const isEdit = scene != null;
+
+  const [scope, setScope] = useState<"room" | "house">(scene?.scope ?? "room");
+  const [room, setRoom] = useState<string | null>(scene?.room ?? defaultRoom ?? SCENE_ROOMS[0]);
   const [name, setName] = useState("");
   const [icon, setIcon] = useState("✨");
   const [description, setDescription] = useState("");
   const [actions, setActions] = useState<SceneAction[]>([]);
-  const [schedule, setSchedule] = useState<SceneSchedule>(emptySchedule());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-
-  const isEdit = scene != null;
+  const [showHouseConfirm, setShowHouseConfirm] = useState(false);
 
   useEffect(() => {
     if (scene) {
+      setScope(scene.scope ?? "house");
+      setRoom(scene.room ?? null);
       setName(scene.name);
       setIcon(scene.icon || "✨");
       setDescription(scene.description || "");
       setActions(scene.actions?.length ? [...scene.actions] : []);
-      setSchedule(
-        scene.schedule
-          ? {
-              enabled: scene.schedule.enabled,
-              time: normalizeTime(scene.schedule.time) || "22:00",
-              daysOfWeek: Array.isArray(scene.schedule.daysOfWeek) ? [...scene.schedule.daysOfWeek] : [],
-            }
-          : emptySchedule()
-      );
     } else {
+      setScope("room");
+      setRoom(defaultRoom ?? SCENE_ROOMS[0]);
       setName("");
       setIcon("✨");
       setDescription("");
       setActions([]);
-      setSchedule(emptySchedule());
     }
-  }, [scene]);
+  }, [scene, defaultRoom]);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  // Filter devices by room when scope is room
+  const filteredDevices =
+    scope === "room" && room
+      ? devices.filter((d) => d.room === room)
+      : devices;
+
+  async function doSave() {
     const trimmedName = name.trim();
     if (!trimmedName) {
       setError("Name is required");
       return;
     }
+    if (scope === "room" && !room) {
+      setError("Please select a room");
+      return;
+    }
     setError("");
     setSaving(true);
     try {
-      const payload = {
+      await onSave({
         name: trimmedName,
         icon: icon || "✨",
         description: description.trim(),
         actions,
-        schedule: schedule.enabled ? { ...schedule, type: "time" as const } : null,
-      };
-      await onSave(payload);
+        schedule: null,
+        scope,
+        room: scope === "room" ? room : null,
+      });
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Save failed");
     } finally {
       setSaving(false);
     }
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    // Show confirmation for new house-wide scenes
+    if (scope === "house" && !isEdit) {
+      setShowHouseConfirm(true);
+      return;
+    }
+    await doSave();
   }
 
   function addAction(type: "device_command" | "task_create" | "music_mode") {
@@ -130,15 +148,6 @@ export default function SceneEditorModal({ scene, devices, onClose, onSave }: Pr
           : a
       )
     );
-  }
-
-  function toggleDay(day: string) {
-    setSchedule((s) => ({
-      ...s,
-      daysOfWeek: s.daysOfWeek.includes(day)
-        ? s.daysOfWeek.filter((d) => d !== day)
-        : [...s.daysOfWeek, day],
-    }));
   }
 
   return (
@@ -174,6 +183,54 @@ export default function SceneEditorModal({ scene, devices, onClose, onSave }: Pr
             </p>
           )}
 
+          {/* Scope selector */}
+          <div>
+            <label className="block text-sm font-medium text-white/70 mb-2">Scope</label>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => { setScope("room"); if (!room) setRoom(SCENE_ROOMS[0]); }}
+                className={`rounded-xl py-3 text-sm font-medium transition border ${
+                  scope === "room"
+                    ? "bg-amber-500/15 border-amber-400/30 text-amber-200"
+                    : "bg-white/5 border-white/10 text-white/70 hover:bg-white/10"
+                }`}
+              >
+                <span className="text-lg block mb-1">🚪</span>
+                Room Scene
+              </button>
+              <button
+                type="button"
+                onClick={() => setScope("house")}
+                className={`rounded-xl py-3 text-sm font-medium transition border ${
+                  scope === "house"
+                    ? "bg-blue-500/15 border-blue-400/30 text-blue-200"
+                    : "bg-white/5 border-white/10 text-white/70 hover:bg-white/10"
+                }`}
+              >
+                <span className="text-lg block mb-1">🏠</span>
+                House-wide
+              </button>
+            </div>
+          </div>
+
+          {/* Room selection (only for room scope) */}
+          {scope === "room" && (
+            <div>
+              <label className="block text-sm font-medium text-white/70 mb-1">Room</label>
+              <select
+                value={room || ""}
+                onChange={(e) => setRoom(e.target.value || null)}
+                className="w-full rounded-xl px-4 py-2.5 text-white/95 bg-slate-800/80 border border-white/10 focus:border-white/20 focus:outline-none"
+              >
+                {SCENE_ROOMS.map((r) => (
+                  <option key={r} value={r}>{r}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Name */}
           <div>
             <label className="block text-sm font-medium text-white/70 mb-1">Name</label>
             <input
@@ -181,10 +238,11 @@ export default function SceneEditorModal({ scene, devices, onClose, onSave }: Pr
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="w-full rounded-xl px-4 py-2.5 text-white/95 bg-slate-800/80 border border-white/10 focus:border-white/20 focus:outline-none"
-              placeholder="e.g. Good Night"
+              placeholder="e.g. Bedtime"
             />
           </div>
 
+          {/* Icon */}
           <div>
             <label className="block text-sm font-medium text-white/70 mb-1">Icon</label>
             <div className="flex flex-wrap gap-2">
@@ -210,6 +268,7 @@ export default function SceneEditorModal({ scene, devices, onClose, onSave }: Pr
             </div>
           </div>
 
+          {/* Description */}
           <div>
             <label className="block text-sm font-medium text-white/70 mb-1">Description</label>
             <input
@@ -270,7 +329,7 @@ export default function SceneEditorModal({ scene, devices, onClose, onSave }: Pr
                   {action.type === "device_command" && (
                     <DeviceCommandEditor
                       action={action}
-                      devices={devices}
+                      devices={filteredDevices}
                       onChange={(deviceId, command) => updateDeviceCommand(index, deviceId, command)}
                     />
                   )}
@@ -301,55 +360,25 @@ export default function SceneEditorModal({ scene, devices, onClose, onSave }: Pr
             </ul>
           </div>
 
-          {/* Schedule */}
-          <div className="rounded-xl bg-slate-800/30 border border-white/10 p-4 space-y-3">
+          {/* Schedule — disabled with Coming Soon */}
+          <div className="rounded-xl bg-slate-800/30 border border-white/10 p-4">
             <div className="flex items-center justify-between">
               <label className="text-sm font-medium text-white/70">Schedule</label>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={schedule.enabled}
-                onClick={() => setSchedule((s) => ({ ...s, enabled: !s.enabled }))}
-                className={`relative w-10 h-6 rounded-full transition ${
-                  schedule.enabled ? "bg-emerald-500/60" : "bg-white/10"
-                }`}
-              >
-                <span
-                  className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition left-1 ${
-                    schedule.enabled ? "translate-x-5" : ""
-                  }`}
-                />
-              </button>
+              <div className="flex items-center gap-2">
+                <span className="text-[0.6875rem] text-amber-400/80 bg-amber-500/10 px-2 py-0.5 rounded-full">
+                  Coming soon
+                </span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={false}
+                  disabled
+                  className="relative w-10 h-6 rounded-full bg-white/10 opacity-50 cursor-not-allowed"
+                >
+                  <span className="absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow" />
+                </button>
+              </div>
             </div>
-            {schedule.enabled && (
-              <>
-                <div>
-                  <label className="block text-[0.75rem] text-white/50 mb-1">Time</label>
-                  <input
-                    type="time"
-                    value={schedule.time}
-                    onChange={(e) => setSchedule((s) => ({ ...s, time: e.target.value }))}
-                    className="rounded-lg px-3 py-2 text-sm text-white/95 bg-slate-800/80 border border-white/10"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[0.75rem] text-white/50 mb-2">Days</label>
-                  <div className="flex flex-wrap gap-2">
-                    {DAYS.map((day) => (
-                      <label key={day} className="flex items-center gap-1.5 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={schedule.daysOfWeek.includes(day)}
-                          onChange={() => toggleDay(day)}
-                          className="rounded border-white/20 bg-slate-800 text-emerald-500 focus:ring-emerald-500"
-                        />
-                        <span className="text-[0.75rem] text-white/80 capitalize">{day}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              </>
-            )}
           </div>
 
           <div className="flex gap-3 pt-2">
@@ -365,10 +394,41 @@ export default function SceneEditorModal({ scene, devices, onClose, onSave }: Pr
               disabled={saving}
               className="flex-1 rounded-xl py-2.5 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 transition"
             >
-              {saving ? "Saving…" : isEdit ? "Update" : "Create"}
+              {saving ? "Saving..." : isEdit ? "Update" : "Create"}
             </button>
           </div>
         </form>
+
+        {/* House-wide confirmation overlay */}
+        {showHouseConfirm && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/60 rounded-3xl">
+            <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6 max-w-sm mx-4 text-center space-y-4">
+              <p className="text-lg text-white/90">Create house-wide scene?</p>
+              <p className="text-sm text-white/60">
+                This scene will affect all rooms and be visible to everyone.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowHouseConfirm(false)}
+                  className="flex-1 rounded-xl py-2.5 text-sm font-medium text-white/80 bg-white/10 hover:bg-white/15 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowHouseConfirm(false);
+                    doSave();
+                  }}
+                  className="flex-1 rounded-xl py-2.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-500 transition"
+                >
+                  Confirm
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

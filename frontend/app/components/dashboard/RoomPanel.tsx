@@ -7,7 +7,11 @@ import { useRealtimeTable } from "../../../lib/useRealtimeTable";
 import { getSupabaseClient } from "../../../lib/supabaseClient";
 import * as tasksService from "../../../lib/services/tasks";
 import * as devicesService from "../../../lib/services/devices";
+import * as scenesService from "../../../lib/services/scenes";
 import type { Device } from "../../../lib/services/devices";
+import type { Scene } from "../../../lib/services/scenes";
+import { getRoomScenes } from "../../../lib/sceneVisibility";
+import { useSceneTrigger } from "../DashboardShell";
 import { taskRowsToUI } from "../../../lib/adapters/tasks";
 import type { UITask } from "../../../lib/adapters/tasks";
 import { formatTaskTimeRange } from "../../../lib/scheduling/formatTaskTimeRange";
@@ -36,6 +40,8 @@ export default function RoomPanel({ roomId, roomLabel }: RoomPanelProps) {
   const [devicesLoading, setDevicesLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const brightnessTimeoutRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const [roomScenes, setRoomScenes] = useState<Scene[]>([]);
+  const sceneTrigger = useSceneTrigger();
   const [addTaskTitle, setAddTaskTitle] = useState("");
   const [addTaskCategory, setAddTaskCategory] = useState("misc");
   const [showAddTask, setShowAddTask] = useState(false);
@@ -62,6 +68,12 @@ export default function RoomPanel({ roomId, roomLabel }: RoomPanelProps) {
   }, [loadDevices]);
 
   useRealtimeEvent("devices_updated", loadDevices);
+
+  useEffect(() => {
+    scenesService.fetchScenes().then((all) => {
+      setRoomScenes(getRoomScenes(all, roomId));
+    }).catch(() => setRoomScenes([]));
+  }, [roomId]);
 
   async function sendCommand(deviceId: string, command: devicesService.DeviceCommand) {
     const prev = roomDevices;
@@ -308,6 +320,33 @@ export default function RoomPanel({ roomId, roomLabel }: RoomPanelProps) {
           </div>
         )}
       </section>
+
+      {roomScenes.length > 0 && (
+        <section className="shrink-0 mb-6">
+          <h2 className="text-xl font-semibold text-white/90 mb-4">Room Scenes</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {roomScenes.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => sceneTrigger?.triggerScene(s.id)}
+                disabled={sceneTrigger?.activatingId != null}
+                className={`rounded-2xl bg-slate-800/50 p-4 backdrop-blur-md border flex flex-col items-center gap-2 hover:bg-slate-800/70 transition disabled:opacity-60 ${
+                  sceneTrigger?.activeScene === s.id
+                    ? "border-emerald-400/30 shadow-[0_0_12px_rgba(52,211,153,0.15)]"
+                    : "border-white/[0.06]"
+                }`}
+              >
+                <span className="text-2xl">{s.icon}</span>
+                <span className="text-sm font-medium text-white/90">{s.name}</span>
+                {s.description && (
+                  <span className="text-[0.6875rem] text-white/50 text-center truncate w-full">{s.description}</span>
+                )}
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="flex-[1] min-h-0 flex flex-col rounded-2xl bg-slate-900/50 backdrop-blur-md border border-white/[0.06] p-4">
         <div className="flex items-center justify-between mb-3 shrink-0">

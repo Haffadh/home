@@ -149,6 +149,7 @@ export default function MainDashboard({
         </div>
       ) : isAbdullah ? (
         <div className="flex flex-col flex-1 min-h-0 gap-6 overflow-auto">
+          <ScenesCard readOnly={false} />
           <HouseBrainTasksCard readOnly={readOnly} title="Today's Tasks" />
           <HouseBrainTasksCard readOnly={readOnly} urgentOnly title="Urgent Tasks" />
           <div className="min-h-0 flex flex-col flex-1 gap-4">

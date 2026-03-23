@@ -118,8 +118,15 @@ CREATE TABLE IF NOT EXISTS scenes (
   icon TEXT DEFAULT '✨',
   description TEXT DEFAULT '',
   actions JSONB DEFAULT '[]'::jsonb,
-  schedule JSONB DEFAULT NULL
+  schedule JSONB DEFAULT NULL,
+  scope TEXT NOT NULL DEFAULT 'house',
+  room TEXT DEFAULT NULL,
+  created_by TEXT DEFAULT NULL,
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  CONSTRAINT chk_scenes_room_scope CHECK (scope = 'house' OR (scope = 'room' AND room IS NOT NULL))
 );
+CREATE INDEX IF NOT EXISTS idx_scenes_scope ON scenes(scope);
+CREATE INDEX IF NOT EXISTS idx_scenes_room ON scenes(room) WHERE room IS NOT NULL;
 
 -- ─── 10. daily_tasks ────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS daily_tasks (

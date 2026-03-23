@@ -63,4 +63,6 @@ export type Scene = {
   name: string;
   emoji: string;
   description: string;
+  scope?: "room" | "house";
+  room?: string | null;
 };

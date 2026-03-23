@@ -13,23 +13,48 @@ export type Scene = {
   description: string;
   actions: Record<string, unknown>[];
   schedule: Record<string, unknown> | null;
+  scope: "room" | "house";
+  room: string | null;
+  created_by: string | null;
+  is_active: boolean;
 };
 
-export async function getScenes(id?: string): Promise<Scene[]> {
-  const db = getDb();
-  let query = db.from("scenes").select("id, name, icon, description, actions, schedule").order("name");
-  if (id) query = db.from("scenes").select("id, name, icon, description, actions, schedule").eq("id", id);
+export type SceneFilters = {
+  id?: string;
+  scope?: "room" | "house";
+  room?: string;
+  is_active?: boolean;
+};
 
-  const { data, error } = await query;
-  if (error) throw error;
-  return (data || []).map((r: Record<string, unknown>) => ({
+const SCENE_COLS = "id, name, icon, description, actions, schedule, scope, room, created_by, is_active";
+
+function mapRow(r: Record<string, unknown>): Scene {
+  return {
     id: r.id as string,
     name: r.name as string,
     icon: (r.icon as string) ?? "✨",
     description: (r.description as string) ?? "",
     actions: Array.isArray(r.actions) ? r.actions : [],
     schedule: r.schedule != null && typeof r.schedule === "object" ? r.schedule as Record<string, unknown> : null,
-  }));
+    scope: r.scope === "room" ? "room" : "house",
+    room: typeof r.room === "string" ? r.room : null,
+    created_by: typeof r.created_by === "string" ? r.created_by : null,
+    is_active: r.is_active !== false,
+  };
+}
+
+export async function getScenes(filters?: SceneFilters): Promise<Scene[]> {
+  const db = getDb();
+  let query = db.from("scenes").select(SCENE_COLS).order("name");
+
+  if (filters?.id) query = query.eq("id", filters.id);
+  if (filters?.scope) query = query.eq("scope", filters.scope);
+  if (filters?.room) query = query.eq("room", filters.room);
+  if (filters?.is_active !== undefined) query = query.eq("is_active", filters.is_active);
+
+  const { data, error } = await query;
+  if (error) throw error;
+  return (data || []).map(mapRow);
 }
 
 export async function runScene(
@@ -40,7 +65,7 @@ export async function runScene(
     getActor: () => { actor_role: string | null; actor_name: string | null };
   }
 ): Promise<{ ok: boolean; message: string; results: Record<string, unknown>[] }> {
-  const scenes = await getScenes(sceneId);
+  const scenes = await getScenes({ id: sceneId });
   const scene = scenes[0];
   if (!scene) throw new Error("Scene not found");
 
@@ -48,7 +73,15 @@ export async function runScene(
   let allDeviceIds: string[] = [];
   try {
     const devices = await deviceService.getDevices(true);
-    allDeviceIds = devices.map((d) => d.id).filter(Boolean);
+    // Room-scoped scenes only target devices in that room
+    if (scene.scope === "room" && scene.room) {
+      allDeviceIds = devices
+        .filter((d) => d.room === scene.room)
+        .map((d) => d.id)
+        .filter(Boolean);
+    } else {
+      allDeviceIds = devices.map((d) => d.id).filter(Boolean);
+    }
   } catch { /* no HA */ }
 
   for (let i = 0; i < scene.actions.length; i++) {
@@ -108,23 +141,31 @@ export async function createScene(scene: {
   description?: string;
   actions?: unknown[];
   schedule?: unknown;
+  scope?: string;
+  room?: string;
+  created_by?: string;
 }): Promise<Scene> {
   const name = String(scene.name || "").trim();
   if (!name) throw new Error("name required");
+
+  const scope = scene.scope === "room" ? "room" : "house";
+  const room = scope === "room" ? String(scene.room || "").trim() || null : null;
+  if (scope === "room" && !room) throw new Error("Room required for room-scoped scenes");
+
   const db = getDb();
   const id = `scene_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
   const icon = String(scene.icon ?? "✨").trim() || "✨";
   const description = String(scene.description ?? "").trim();
   const actions = Array.isArray(scene.actions) ? scene.actions : [];
   const schedule = scene.schedule != null ? scene.schedule : null;
+  const created_by = typeof scene.created_by === "string" ? scene.created_by : null;
 
   const { error } = await db.from("scenes").insert({
-    id, name, icon, description,
-    actions,
-    schedule,
+    id, name, icon, description, actions, schedule,
+    scope, room, created_by, is_active: true,
   });
   if (error) throw error;
-  const [created] = await getScenes(id);
+  const [created] = await getScenes({ id });
   return created;
 }
 
@@ -136,12 +177,15 @@ export async function updateScene(id: string, updates: Record<string, unknown>):
   if (updates.description !== undefined) patch.description = String(updates.description).trim();
   if (updates.actions !== undefined) patch.actions = Array.isArray(updates.actions) ? updates.actions : [];
   if (updates.schedule !== undefined) patch.schedule = updates.schedule == null ? null : updates.schedule;
+  if (updates.scope !== undefined) patch.scope = updates.scope === "room" ? "room" : "house";
+  if (updates.room !== undefined) patch.room = typeof updates.room === "string" ? updates.room : null;
+  if (updates.is_active !== undefined) patch.is_active = Boolean(updates.is_active);
 
   if (Object.keys(patch).length === 0) throw new Error("No updates");
   const { error, count } = await db.from("scenes").update(patch).eq("id", id);
   if (error) throw error;
   if (count === 0) throw new Error("Scene not found");
-  const [updated] = await getScenes(id);
+  const [updated] = await getScenes({ id });
   return updated;
 }
 

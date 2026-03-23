@@ -8,6 +8,8 @@ import type { Scene } from "../../lib/services/scenes";
 import type { Device } from "../../lib/services/devices";
 import SceneEditorModal from "../components/scenes/SceneEditorModal";
 
+type ScopeFilter = "all" | "room" | "house";
+
 export default function ScenesPage() {
   const [scenes, setScenes] = useState<Scene[]>([]);
   const [devices, setDevices] = useState<Device[]>([]);
@@ -16,6 +18,7 @@ export default function ScenesPage() {
   const [runningId, setRunningId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [editorScene, setEditorScene] = useState<Scene | null | "new">(null);
+  const [filterScope, setFilterScope] = useState<ScopeFilter>("all");
 
   const loadScenes = useCallback(async () => {
     try {
@@ -65,6 +68,8 @@ export default function ScenesPage() {
     description: string;
     actions: Scene["actions"];
     schedule: Scene["schedule"];
+    scope: "room" | "house";
+    room: string | null;
   }) {
     if (editorScene === "new") {
       await scenesService.createScene(payload);
@@ -80,16 +85,20 @@ export default function ScenesPage() {
       setDeleteConfirmId(null);
       await loadScenes();
     } catch {
-      // keep confirm open or show toast
+      // keep confirm open
     }
   }
 
-  function scheduleStatus(scene: Scene): string {
-    if (!scene.schedule?.enabled) return "Not scheduled";
-    const days = scene.schedule.daysOfWeek?.length;
-    const time = scene.schedule.time || "—";
-    return days ? `${time} · ${days} days` : time;
-  }
+  const filteredScenes =
+    filterScope === "all"
+      ? scenes
+      : scenes.filter((s) => s.scope === filterScope);
+
+  const SCOPE_TABS: { key: ScopeFilter; label: string }[] = [
+    { key: "all", label: "All" },
+    { key: "house", label: "House-wide" },
+    { key: "room", label: "Room" },
+  ];
 
   return (
     <div className="max-w-screen-2xl mx-auto px-6 py-6 md:py-10">
@@ -120,22 +129,49 @@ export default function ScenesPage() {
         </div>
       </div>
 
-      {loading ? (
-        <p className="text-[0.8125rem] text-white/45">Loading…</p>
-      ) : scenes.length === 0 ? (
-        <div className="rounded-3xl bg-[#0f172a]/70 backdrop-blur-xl border border-white/10 p-8 text-center">
-          <p className="text-white/60 mb-4">No scenes yet.</p>
+      {/* Scope filter tabs */}
+      <div className="flex gap-2 mb-6">
+        {SCOPE_TABS.map((tab) => (
           <button
+            key={tab.key}
             type="button"
-            onClick={() => setEditorScene("new")}
-            className="rounded-xl bg-emerald-600 hover:bg-emerald-500 px-4 py-2.5 text-sm font-medium text-white transition"
+            onClick={() => setFilterScope(tab.key)}
+            className={`rounded-xl px-4 py-2 text-[0.8125rem] font-medium transition ${
+              filterScope === tab.key
+                ? "bg-white/15 text-white/95"
+                : "bg-white/5 text-white/55 hover:bg-white/10 hover:text-white/80"
+            }`}
           >
-            Create your first scene
+            {tab.label}
+            <span className="ml-1.5 text-[0.6875rem] text-white/40">
+              {tab.key === "all"
+                ? scenes.length
+                : scenes.filter((s) => s.scope === tab.key).length}
+            </span>
           </button>
+        ))}
+      </div>
+
+      {loading ? (
+        <p className="text-[0.8125rem] text-white/45">Loading...</p>
+      ) : filteredScenes.length === 0 ? (
+        <div className="rounded-3xl bg-[#0f172a]/70 backdrop-blur-xl border border-white/10 p-8 text-center">
+          <p className="text-white/60 mb-4">
+            {scenes.length === 0 ? "No scenes yet." : "No scenes match this filter."}
+          </p>
+          {scenes.length === 0 && (
+            <button
+              type="button"
+              onClick={() => setEditorScene("new")}
+              className="rounded-xl bg-emerald-600 hover:bg-emerald-500 px-4 py-2.5 text-sm font-medium text-white transition"
+            >
+              Create your first scene
+            </button>
+          )}
         </div>
       ) : (
         <ul className="space-y-4">
-          {scenes.map((scene) => (
+          {filteredScenes.map((scene) => (
             <li
               key={scene.id}
               className="rounded-3xl bg-[#0f172a]/70 backdrop-blur-xl border border-white/10 overflow-hidden transition hover:bg-[#0f172a]/80"
@@ -143,9 +179,20 @@ export default function ScenesPage() {
               <div className="p-5 flex flex-wrap items-center gap-4">
                 <span className="text-2xl shrink-0" aria-hidden>{scene.icon}</span>
                 <div className="min-w-0 flex-1">
-                  <p className="text-[0.9375rem] font-medium text-white/95">{scene.name}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-[0.9375rem] font-medium text-white/95">{scene.name}</p>
+                    <span className={`text-[0.6875rem] px-2 py-0.5 rounded-full ${
+                      scene.scope === "house"
+                        ? "bg-blue-500/10 text-blue-300"
+                        : "bg-amber-500/10 text-amber-300"
+                    }`}>
+                      {scene.scope === "house" ? "House-wide" : scene.room}
+                    </span>
+                  </div>
                   <p className="text-[0.8125rem] text-white/55 truncate">{scene.description || "No description"}</p>
-                  <p className="text-[0.6875rem] text-white/45 mt-1">{scheduleStatus(scene)}</p>
+                  {scene.created_by && (
+                    <p className="text-[0.6875rem] text-white/35 mt-0.5">by {scene.created_by}</p>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <button
@@ -154,7 +201,7 @@ export default function ScenesPage() {
                     disabled={runningId !== null}
                     className="rounded-xl bg-emerald-600/80 hover:bg-emerald-500/80 disabled:opacity-50 px-4 py-2 text-[0.8125rem] font-medium text-white transition"
                   >
-                    {runningId === scene.id ? "…" : "Run"}
+                    {runningId === scene.id ? "..." : "Run"}
                   </button>
                   <button
                     type="button"

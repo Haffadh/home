@@ -56,6 +56,10 @@ export type Scene = {
   description: string;
   actions: SceneAction[];
   schedule: SceneSchedule | null;
+  scope: "room" | "house";
+  room: string | null;
+  created_by: string | null;
+  is_active: boolean;
 };
 
 export type SceneInsert = {
@@ -64,6 +68,9 @@ export type SceneInsert = {
   description?: string;
   actions?: SceneAction[];
   schedule?: SceneSchedule | null;
+  scope?: "room" | "house";
+  room?: string | null;
+  created_by?: string | null;
 };
 
 export type SceneUpdate = Partial<SceneInsert>;
@@ -80,12 +87,25 @@ function mapScene(d: Record<string, unknown>): Scene {
       schedule != null && typeof schedule === "object" && (schedule as SceneSchedule).enabled !== undefined
         ? (schedule as SceneSchedule)
         : null,
+    scope: d.scope === "room" ? "room" : "house",
+    room: typeof d.room === "string" ? d.room : null,
+    created_by: typeof d.created_by === "string" ? d.created_by : null,
+    is_active: d.is_active !== false,
   };
 }
 
-export async function fetchScenes(): Promise<Scene[]> {
+export async function fetchScenes(filters?: {
+  scope?: "room" | "house";
+  room?: string;
+}): Promise<Scene[]> {
   try {
-    const data = (await getApiBase("/api/scenes", { cache: "no-store" }) as { ok?: boolean; scenes?: Record<string, unknown>[] });
+    const params = new URLSearchParams();
+    if (filters?.scope) params.set("scope", filters.scope);
+    if (filters?.room) params.set("room", filters.room);
+    const qs = params.toString();
+    const path = qs ? `/api/scenes?${qs}` : "/api/scenes";
+
+    const data = (await getApiBase(path, { cache: "no-store" }) as { ok?: boolean; scenes?: Record<string, unknown>[] });
     const list = Array.isArray(data?.scenes) ? data.scenes : [];
     return list.map(mapScene);
   } catch (e) {

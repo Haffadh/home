@@ -5,18 +5,20 @@ import GlassCard from "./GlassCard";
 import { useSceneTrigger } from "../DashboardShell";
 import * as scenesService from "../../../lib/services/scenes";
 import type { Scene } from "../../../lib/services/scenes";
+import { getStoredRole } from "../../../lib/roles";
+import type { Role } from "../../../lib/roles";
+import { getVisibleScenes } from "../../../lib/sceneVisibility";
 
 type ScenesCardProps = { readOnly?: boolean };
 
 export default function ScenesCard({ readOnly = false }: ScenesCardProps) {
-  const [scenes, setScenes] = useState<Scene[]>([]);
+  const [allScenes, setAllScenes] = useState<Scene[]>([]);
+  const [role, setRole] = useState<Role | null>(null);
   const [loading, setLoading] = useState(true);
   const ctx = useSceneTrigger();
   const triggerScene = ctx?.triggerScene ?? (async () => {});
   const activatingId = ctx?.activatingId ?? null;
   const activeScene = ctx?.activeScene ?? null;
-  const error = ctx?.sceneError ?? null;
-  const sceneMessage = ctx?.sceneMessage ?? null;
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const [fadeTop, setFadeTop] = useState(false);
@@ -28,13 +30,17 @@ export default function ScenesCard({ readOnly = false }: ScenesCardProps) {
     setFadeBottom(el.scrollTop + el.clientHeight < el.scrollHeight - 8);
   }
 
+  useEffect(() => {
+    setRole(getStoredRole());
+  }, []);
+
   const loadScenes = useCallback(async () => {
     setLoading(true);
     try {
       const list = await scenesService.fetchScenes();
-      setScenes(list);
+      setAllScenes(list);
     } catch {
-      setScenes([]);
+      setAllScenes([]);
     } finally {
       setLoading(false);
     }
@@ -44,12 +50,14 @@ export default function ScenesCard({ readOnly = false }: ScenesCardProps) {
     loadScenes();
   }, [loadScenes]);
 
+  const scenes = getVisibleScenes(allScenes, role);
+
   return (
     <GlassCard className="animate-fade-in-up opacity-0 overflow-hidden" style={{ animationDelay: "0.05s" }}>
       <div className="flex flex-col min-h-0 flex-1 gap-4">
         <h2 className="text-xl font-semibold text-white/90 shrink-0">Scenes</h2>
         {loading ? (
-          <p className="text-[0.8125rem] text-white/45">Loading…</p>
+          <p className="text-[0.8125rem] text-white/45">Loading...</p>
         ) : (
           <div className="relative min-h-0 flex-1" style={{ maxHeight: scenes.length > 4 ? "calc(4 * 3.75rem + 3.5 * 0.75rem + 1.5rem)" : undefined }}>
             <div ref={scrollRef} onScroll={handleScroll} className="flex flex-col gap-3 overflow-y-auto min-h-0 h-full no-scrollbar">
@@ -68,10 +76,19 @@ export default function ScenesCard({ readOnly = false }: ScenesCardProps) {
                   <span className="text-xl shrink-0 relative z-10" aria-hidden>{s.icon}</span>
                   <div className="min-w-0 flex-1 relative z-10">
                     <p className="text-[0.875rem] font-medium text-white/90 truncate">{s.name}</p>
-                    <p className="text-sm text-white/60 truncate">{s.description || "Tap to run"}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm text-white/60 truncate flex-1">{s.description || "Tap to run"}</p>
+                      <span className={`text-[0.6rem] px-1.5 py-0.5 rounded-full shrink-0 ${
+                        s.scope === "house"
+                          ? "bg-blue-500/10 text-blue-300/70"
+                          : "bg-amber-500/10 text-amber-300/70"
+                      }`}>
+                        {s.scope === "house" ? "House" : s.room}
+                      </span>
+                    </div>
                   </div>
                   {activatingId === s.id && (
-                    <span className="shrink-0 text-[0.75rem] text-white/50 relative z-10">…</span>
+                    <span className="shrink-0 text-[0.75rem] text-white/50 relative z-10">...</span>
                   )}
                 </button>
               ))}
@@ -85,7 +102,7 @@ export default function ScenesCard({ readOnly = false }: ScenesCardProps) {
           </div>
         )}
         {!loading && scenes.length === 0 && (
-          <p className="text-[0.8125rem] text-white/45">No scenes. Add defaults on the server.</p>
+          <p className="text-[0.8125rem] text-white/45">No scenes available.</p>
         )}
       </div>
     </GlassCard>

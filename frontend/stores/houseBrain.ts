@@ -18,10 +18,10 @@ const DEFAULT_MEALS: MealsState = {
 };
 
 const DEFAULT_SCENES: Scene[] = [
-  { id: "shower", name: "Shower Mode", emoji: "🚿", description: "Towel heaters ON for 45 min" },
-  { id: "away", name: "Away Mode", emoji: "🚪", description: "Doors locked • Lights off" },
-  { id: "sleep", name: "Sleep Mode", emoji: "🌙", description: "Lights off • Quiet • AC off" },
-  { id: "gathering", name: "Gathering Mode", emoji: "🍷", description: "Prepare living room & snacks" },
+  { id: "shower", name: "Shower Mode", emoji: "🚿", description: "Towel heaters ON for 45 min", scope: "house" },
+  { id: "away", name: "Away Mode", emoji: "🚪", description: "Doors locked, Lights off", scope: "house" },
+  { id: "sleep", name: "Sleep Mode", emoji: "🌙", description: "Lights off, Quiet, AC off", scope: "house" },
+  { id: "gathering", name: "Gathering Mode", emoji: "🍷", description: "Prepare living room & snacks", scope: "house" },
 ];
 
 function nextId(): string {
