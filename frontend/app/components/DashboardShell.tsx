@@ -126,6 +126,7 @@ export default function DashboardShell({
 
   const closeSidebar = () => setSidebarOpen(false);
   const isHome = pathname === "/" || pathname.startsWith("/panel/");
+  const isFamilyPanel = pathname === "/panel/house";
   const isRoomPanel = /^\/panel\/(winklevi_room|mariam_room|master_bedroom|dining_room|living_room)$/.test(pathname);
   const roomSegment = pathname.replace(/^\/panel\//, "");
   const roomName = isRoomPanel && roomSegment ? (ROLE_LABELS[roomSegment as Role] ?? roomSegment) : null;
@@ -134,7 +135,7 @@ export default function DashboardShell({
   }, [isRoomPanel]);
 
   useEffect(() => {
-    if (isHome) {
+    if (isHome && !isFamilyPanel) {
       document.documentElement.classList.add("home-no-scroll");
     } else {
       document.documentElement.classList.remove("home-no-scroll");
@@ -291,7 +292,7 @@ export default function DashboardShell({
           </div>
         </header>
 
-        <main className={`flex-1 min-h-0 ${isHome ? "overflow-hidden" : "overflow-auto"}`}>
+        <main className={`flex-1 min-h-0 ${isHome && !isFamilyPanel ? "overflow-hidden" : "overflow-auto"}`}>
           {children}
         </main>
       </div>
