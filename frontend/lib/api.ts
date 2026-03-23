@@ -1,6 +1,9 @@
 /**
  * API base URL and request helper. getApiBase(path) performs the request and returns parsed JSON.
  * All backend API calls use the Supabase access token for Authorization when available.
+ *
+ * Auto-refresh: on 401, silently re-authenticates using the stored role and retries once.
+ * This keeps household tablets (iPad) permanently logged in without manual re-login.
  */
 
 import { getSupabaseClient } from "./supabaseClient";
@@ -41,11 +44,51 @@ async function getAccessToken(): Promise<string | null> {
 }
 
 /**
+ * Silent re-login: calls /auth/role-login with the stored role to get a fresh JWT.
+ * Returns the new token or null if refresh fails.
+ */
+let refreshInFlight: Promise<string | null> | null = null;
+
+async function refreshToken(): Promise<string | null> {
+  // Deduplicate concurrent refresh calls
+  if (refreshInFlight) return refreshInFlight;
+
+  refreshInFlight = (async () => {
+    try {
+      if (typeof window === "undefined") return null;
+      const role = localStorage.getItem(STORAGE_KEY_ROLE);
+      if (!role) return null;
+
+      const res = await fetch(`${API_BASE}/auth/role-login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role }),
+      });
+      if (!res.ok) return null;
+
+      const data = await res.json();
+      if (data.accessToken) {
+        localStorage.setItem("token", data.accessToken);
+        localStorage.setItem(AUTH_TOKEN_KEY_LEGACY, data.accessToken);
+        return data.accessToken as string;
+      }
+      return null;
+    } catch {
+      return null;
+    } finally {
+      refreshInFlight = null;
+    }
+  })();
+
+  return refreshInFlight;
+}
+
+/**
  * Shared fetch for backend API. Automatically adds:
  * - Base URL (API_BASE + path)
  * - Content-Type: application/json
  * - Authorization: Bearer <Supabase access_token or localStorage token>
- * Preserves method, body, and other RequestInit options.
+ * On 401, silently refreshes the token and retries once.
  */
 export async function apiFetch(path: string, options: RequestInit = {}): Promise<Response> {
   const token = await getAccessToken();
@@ -56,10 +99,18 @@ export async function apiFetch(path: string, options: RequestInit = {}): Promise
       : {}),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
-  return fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers,
-  });
+  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+
+  // Auto-refresh on 401 — retry once with a fresh token
+  if (res.status === 401 && !path.includes("/auth/")) {
+    const newToken = await refreshToken();
+    if (newToken) {
+      headers.Authorization = `Bearer ${newToken}`;
+      return fetch(`${API_BASE}${path}`, { ...options, headers });
+    }
+  }
+
+  return res;
 }
 
 /**
@@ -107,4 +158,3 @@ export function withActorBody<T extends Record<string, unknown>>(body: T): T {
   const { actorRole, actorName } = getActorMeta();
   return { ...body, ...(actorRole && { actorRole }), ...(actorName && { actorName }) };
 }
-
