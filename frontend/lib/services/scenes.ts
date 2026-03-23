@@ -22,11 +22,17 @@ export type TaskCreateAction = {
   type: "task_create";
   title: string;
   assigned_to?: number;
+  priority?: "normal" | "urgent";
+  time_window?: "morning" | "afternoon" | "evening";
+  room?: string;
 };
 
 export type MusicModeAction = {
   type: "music_mode";
-  mode: "on" | "off" | "stop";
+  mode: "play" | "pause" | "stop";
+  genre?: string;
+  volume?: number;
+  room?: string;
 };
 
 export type NotificationAction = {

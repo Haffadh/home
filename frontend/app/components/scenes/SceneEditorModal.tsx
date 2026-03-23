@@ -5,12 +5,14 @@ import type {
   Scene,
   SceneAction,
   DeviceCommandAction,
+  TaskCreateAction,
   MusicModeAction,
 } from "../../../lib/services/scenes";
 import type { Device } from "../../../lib/services/devices";
 
-const ICON_OPTIONS = ["✨", "🌙", "🚪", "🎬", "🚿", "💡", "❄️", "🪟", "🍷", "🏠", "☀️"];
-const MUSIC_MODES = ["on", "off", "stop"] as const;
+/* ── Constants ────────────────────────────────────────────────────────────── */
+
+const ICON_OPTIONS = ["✨", "🌙", "🚪", "🎬", "🚿", "💡", "❄️", "🪟", "🍷", "🏠", "☀️", "🎵"];
 const FAN_SPEEDS = ["low", "mid", "high", "auto"] as const;
 const SCENE_ROOMS = [
   "Kitchen",
@@ -20,6 +22,30 @@ const SCENE_ROOMS = [
   "Winklevi Room",
   "Mariam Room",
 ] as const;
+
+const MUSIC_GENRES = [
+  "Quran",
+  "Arabic",
+  "Jazz",
+  "Classical",
+  "Chill",
+  "Pop",
+  "Lo-fi",
+  "Ambient",
+] as const;
+
+const TIME_WINDOWS = [
+  { value: "morning", label: "Morning", desc: "8 AM - 12 PM" },
+  { value: "afternoon", label: "Afternoon", desc: "12 PM - 5 PM" },
+  { value: "evening", label: "Evening", desc: "5 PM - 10 PM" },
+] as const;
+
+const ACTION_LABELS: Record<string, string> = {
+  device_command: "Device Command",
+  task_create: "Create Task",
+  music_mode: "Music",
+  notification: "Notification",
+};
 
 type DeviceCommandKind = "switch" | "brightness" | "temperature" | "fanSpeed" | "blindsOpen";
 
@@ -39,15 +65,19 @@ type Props = {
   defaultRoom?: string | null;
 };
 
+/* ── Helpers ──────────────────────────────────────────────────────────────── */
+
 function defaultAction(type: "device_command" | "task_create" | "music_mode"): SceneAction {
   if (type === "device_command") {
     return { type: "device_command", deviceId: "", command: { switch: false } };
   }
   if (type === "task_create") {
-    return { type: "task_create", title: "" };
+    return { type: "task_create", title: "", priority: "normal", time_window: "morning" };
   }
-  return { type: "music_mode", mode: "stop" };
+  return { type: "music_mode", mode: "play", genre: "Quran", volume: 40 };
 }
+
+/* ── Main Component ──────────────────────────────────────────────────────── */
 
 export default function SceneEditorModal({ scene, devices, onClose, onSave, defaultRoom }: Props) {
   const isEdit = scene != null;
@@ -80,7 +110,6 @@ export default function SceneEditorModal({ scene, devices, onClose, onSave, defa
     }
   }, [scene, defaultRoom]);
 
-  // Filter devices by room when scope is room
   const filteredDevices =
     scope === "room" && room
       ? devices.filter((d) => d.room === room)
@@ -88,14 +117,8 @@ export default function SceneEditorModal({ scene, devices, onClose, onSave, defa
 
   async function doSave() {
     const trimmedName = name.trim();
-    if (!trimmedName) {
-      setError("Name is required");
-      return;
-    }
-    if (scope === "room" && !room) {
-      setError("Please select a room");
-      return;
-    }
+    if (!trimmedName) { setError("Name is required"); return; }
+    if (scope === "room" && !room) { setError("Please select a room"); return; }
     setError("");
     setSaving(true);
     try {
@@ -118,11 +141,7 @@ export default function SceneEditorModal({ scene, devices, onClose, onSave, defa
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    // Show confirmation for new house-wide scenes
-    if (scope === "house" && !isEdit) {
-      setShowHouseConfirm(true);
-      return;
-    }
+    if (scope === "house" && !isEdit) { setShowHouseConfirm(true); return; }
     await doSave();
   }
 
@@ -134,20 +153,8 @@ export default function SceneEditorModal({ scene, devices, onClose, onSave, defa
     setActions((prev) => prev.filter((_, i) => i !== index));
   }
 
-  function updateAction(index: number, patch: Partial<SceneAction>) {
-    setActions((prev) =>
-      prev.map((a, i) => (i === index ? { ...a, ...patch } as SceneAction : a))
-    );
-  }
-
-  function updateDeviceCommand(index: number, deviceId: string, command: DeviceCommandAction["command"]) {
-    setActions((prev) =>
-      prev.map((a, i) =>
-        i === index && a.type === "device_command"
-          ? { ...a, deviceId: deviceId || undefined, command }
-          : a
-      )
-    );
+  function replaceAction(index: number, action: SceneAction) {
+    setActions((prev) => prev.map((a, i) => (i === index ? action : a)));
   }
 
   return (
@@ -162,7 +169,8 @@ export default function SceneEditorModal({ scene, devices, onClose, onSave, defa
         className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-3xl bg-[#0f172a] border border-white/10 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+          {/* Header */}
           <div className="flex items-center justify-between">
             <h2 id="scene-editor-title" className="text-xl font-semibold text-white/95">
               {isEdit ? "Edit Scene" : "New Scene"}
@@ -183,7 +191,7 @@ export default function SceneEditorModal({ scene, devices, onClose, onSave, defa
             </p>
           )}
 
-          {/* Scope selector */}
+          {/* Scope */}
           <div>
             <label className="block text-sm font-medium text-white/70 mb-2">Scope</label>
             <div className="grid grid-cols-2 gap-3">
@@ -214,7 +222,7 @@ export default function SceneEditorModal({ scene, devices, onClose, onSave, defa
             </div>
           </div>
 
-          {/* Room selection (only for room scope) */}
+          {/* Room */}
           {scope === "room" && (
             <div>
               <label className="block text-sm font-medium text-white/70 mb-1">Room</label>
@@ -230,41 +238,46 @@ export default function SceneEditorModal({ scene, devices, onClose, onSave, defa
             </div>
           )}
 
-          {/* Name */}
-          <div>
-            <label className="block text-sm font-medium text-white/70 mb-1">Name</label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-xl px-4 py-2.5 text-white/95 bg-slate-800/80 border border-white/10 focus:border-white/20 focus:outline-none"
-              placeholder="e.g. Bedtime"
-            />
-          </div>
-
-          {/* Icon */}
-          <div>
-            <label className="block text-sm font-medium text-white/70 mb-1">Icon</label>
-            <div className="flex flex-wrap gap-2">
-              {ICON_OPTIONS.map((emoji) => (
-                <button
-                  key={emoji}
-                  type="button"
-                  onClick={() => setIcon(emoji)}
-                  className={`w-10 h-10 rounded-xl text-xl flex items-center justify-center transition ${
-                    icon === emoji ? "bg-white/20 ring-1 ring-white/30" : "bg-white/5 hover:bg-white/10"
-                  }`}
-                >
-                  {emoji}
-                </button>
-              ))}
+          {/* Name + Icon row */}
+          <div className="flex gap-3">
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-white/70 mb-1">Name</label>
               <input
                 type="text"
-                value={icon}
-                onChange={(e) => setIcon(e.target.value.slice(0, 2) || "✨")}
-                className="w-14 rounded-xl px-2 py-2 text-center text-lg bg-slate-800/80 border border-white/10"
-                placeholder="✨"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full rounded-xl px-4 py-2.5 text-white/95 bg-slate-800/80 border border-white/10 focus:border-white/20 focus:outline-none"
+                placeholder="e.g. Bedtime"
               />
+            </div>
+            <div className="shrink-0">
+              <label className="block text-sm font-medium text-white/70 mb-1">Icon</label>
+              <div className="flex gap-1.5 flex-wrap max-w-[8rem]">
+                {ICON_OPTIONS.slice(0, 6).map((emoji) => (
+                  <button
+                    key={emoji}
+                    type="button"
+                    onClick={() => setIcon(emoji)}
+                    className={`w-9 h-9 rounded-lg text-lg flex items-center justify-center transition ${
+                      icon === emoji ? "bg-white/20 ring-1 ring-white/30" : "bg-white/5 hover:bg-white/10"
+                    }`}
+                  >
+                    {emoji}
+                  </button>
+                ))}
+                {ICON_OPTIONS.slice(6).map((emoji) => (
+                  <button
+                    key={emoji}
+                    type="button"
+                    onClick={() => setIcon(emoji)}
+                    className={`w-9 h-9 rounded-lg text-lg flex items-center justify-center transition ${
+                      icon === emoji ? "bg-white/20 ring-1 ring-white/30" : "bg-white/5 hover:bg-white/10"
+                    }`}
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
@@ -282,85 +295,72 @@ export default function SceneEditorModal({ scene, devices, onClose, onSave, defa
 
           {/* Actions */}
           <div>
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center justify-between mb-3">
               <label className="block text-sm font-medium text-white/70">Actions</label>
               <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => addAction("device_command")}
-                  className="text-[0.75rem] rounded-lg px-2.5 py-1.5 bg-white/10 text-white/80 hover:bg-white/15"
-                >
-                  + Device
-                </button>
-                <button
-                  type="button"
-                  onClick={() => addAction("task_create")}
-                  className="text-[0.75rem] rounded-lg px-2.5 py-1.5 bg-white/10 text-white/80 hover:bg-white/15"
-                >
-                  + Task
-                </button>
-                <button
-                  type="button"
-                  onClick={() => addAction("music_mode")}
-                  className="text-[0.75rem] rounded-lg px-2.5 py-1.5 bg-white/10 text-white/80 hover:bg-white/15"
-                >
-                  + Music
-                </button>
+                {(["device_command", "task_create", "music_mode"] as const).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => addAction(t)}
+                    className="text-[0.75rem] rounded-lg px-2.5 py-1.5 bg-white/10 text-white/80 hover:bg-white/15 transition"
+                  >
+                    + {t === "device_command" ? "Device" : t === "task_create" ? "Task" : "Music"}
+                  </button>
+                ))}
               </div>
             </div>
+
+            {actions.length === 0 && (
+              <p className="text-[0.8125rem] text-white/40 text-center py-4 rounded-xl border border-dashed border-white/10">
+                No actions yet. Add a device, task, or music action above.
+              </p>
+            )}
+
             <ul className="space-y-3">
               {actions.map((action, index) => (
                 <li
                   key={index}
-                  className="rounded-xl bg-slate-800/50 border border-white/10 p-3 space-y-2"
+                  className="rounded-xl bg-slate-800/50 border border-white/10 p-3 space-y-3"
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-[0.75rem] text-white/50 uppercase tracking-wide">
-                      {action.type}
+                    <span className="text-[0.75rem] font-medium text-white/60">
+                      {ACTION_LABELS[action.type] ?? action.type}
                     </span>
                     <button
                       type="button"
                       onClick={() => removeAction(index)}
-                      className="text-white/50 hover:text-rose-300 text-sm"
+                      className="text-[0.75rem] text-white/40 hover:text-rose-300 transition"
                     >
                       Remove
                     </button>
                   </div>
+
                   {action.type === "device_command" && (
                     <DeviceCommandEditor
                       action={action}
                       devices={filteredDevices}
-                      onChange={(deviceId, command) => updateDeviceCommand(index, deviceId, command)}
+                      onChange={(a) => replaceAction(index, a)}
                     />
                   )}
                   {action.type === "task_create" && (
-                    <input
-                      type="text"
-                      value={action.title}
-                      onChange={(e) => updateAction(index, { title: e.target.value })}
-                      placeholder="Task title"
-                      className="w-full rounded-lg px-3 py-2 text-sm text-white/95 bg-slate-800/80 border border-white/10"
+                    <TaskCreateEditor
+                      action={action}
+                      onChange={(a) => replaceAction(index, a)}
                     />
                   )}
                   {action.type === "music_mode" && (
-                    <select
-                      value={action.mode}
-                      onChange={(e) => updateAction(index, { mode: e.target.value as MusicModeAction["mode"] })}
-                      className="w-full rounded-lg px-3 py-2 text-sm text-white/95 bg-slate-800/80 border border-white/10"
-                    >
-                      {MUSIC_MODES.map((m) => (
-                        <option key={m} value={m}>
-                          {m}
-                        </option>
-                      ))}
-                    </select>
+                    <MusicEditor
+                      action={action}
+                      onChange={(a) => replaceAction(index, a)}
+                    />
                   )}
                 </li>
               ))}
             </ul>
           </div>
 
-          {/* Schedule — disabled with Coming Soon */}
+          {/* Schedule — disabled */}
           <div className="rounded-xl bg-slate-800/30 border border-white/10 p-4">
             <div className="flex items-center justify-between">
               <label className="text-sm font-medium text-white/70">Schedule</label>
@@ -368,20 +368,15 @@ export default function SceneEditorModal({ scene, devices, onClose, onSave, defa
                 <span className="text-[0.6875rem] text-amber-400/80 bg-amber-500/10 px-2 py-0.5 rounded-full">
                   Coming soon
                 </span>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={false}
-                  disabled
-                  className="relative w-10 h-6 rounded-full bg-white/10 opacity-50 cursor-not-allowed"
-                >
+                <div className="relative w-10 h-6 rounded-full bg-white/10 opacity-50 cursor-not-allowed">
                   <span className="absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow" />
-                </button>
+                </div>
               </div>
             </div>
           </div>
 
-          <div className="flex gap-3 pt-2">
+          {/* Buttons */}
+          <div className="flex gap-3 pt-1">
             <button
               type="button"
               onClick={onClose}
@@ -399,7 +394,7 @@ export default function SceneEditorModal({ scene, devices, onClose, onSave, defa
           </div>
         </form>
 
-        {/* House-wide confirmation overlay */}
+        {/* House-wide confirmation */}
         {showHouseConfirm && (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/60 rounded-3xl">
             <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6 max-w-sm mx-4 text-center space-y-4">
@@ -417,10 +412,7 @@ export default function SceneEditorModal({ scene, devices, onClose, onSave, defa
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    setShowHouseConfirm(false);
-                    doSave();
-                  }}
+                  onClick={() => { setShowHouseConfirm(false); doSave(); }}
                   className="flex-1 rounded-xl py-2.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-500 transition"
                 >
                   Confirm
@@ -434,6 +426,8 @@ export default function SceneEditorModal({ scene, devices, onClose, onSave, defa
   );
 }
 
+/* ── Device Command Editor ───────────────────────────────────────────────── */
+
 function DeviceCommandEditor({
   action,
   devices,
@@ -441,11 +435,10 @@ function DeviceCommandEditor({
 }: {
   action: DeviceCommandAction;
   devices: Device[];
-  onChange: (deviceId: string, command: DeviceCommandAction["command"]) => void;
+  onChange: (action: DeviceCommandAction) => void;
 }) {
   const cmd = action.command || {};
   const inferKind = (): DeviceCommandKind => {
-    if (cmd.switch !== undefined) return "switch";
     if (cmd.brightness !== undefined) return "brightness";
     if (cmd.temperature !== undefined) return "temperature";
     if (cmd.fanSpeed !== undefined) return "fanSpeed";
@@ -453,103 +446,95 @@ function DeviceCommandEditor({
     return "switch";
   };
   const [kind, setKind] = useState<DeviceCommandKind>(() => inferKind());
-  const deviceId = action.deviceId ?? (devices[0]?.id ?? "");
+  const deviceId = action.deviceId ?? "";
 
-  function applyKind(k: DeviceCommandKind, value: unknown) {
+  function apply(k: DeviceCommandKind, value: unknown, did?: string) {
     const base: DeviceCommandAction["command"] = {};
     if (k === "switch") base.switch = value as boolean;
     if (k === "brightness") base.brightness = value as number;
     if (k === "temperature") base.temperature = value as number;
     if (k === "fanSpeed") base.fanSpeed = value as string;
     if (k === "blindsOpen") base.blindsOpen = value as boolean;
-    onChange(deviceId, base);
+    onChange({ type: "device_command", deviceId: did ?? deviceId, command: base });
   }
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2.5">
       <select
         value={deviceId}
-        onChange={(e) => onChange(e.target.value, cmd)}
+        onChange={(e) => onChange({ ...action, deviceId: e.target.value || undefined })}
         className="w-full rounded-lg px-3 py-2 text-sm text-white/95 bg-slate-800/80 border border-white/10"
       >
         <option value="">Select device</option>
         {devices.map((d) => (
           <option key={d.id} value={d.id}>
-            {d.name} {d.room ? `(${d.room})` : ""}
+            {d.name}{d.room ? ` (${d.room})` : ""}
           </option>
         ))}
       </select>
+
       <select
         value={kind}
         onChange={(e) => {
           const k = e.target.value as DeviceCommandKind;
           setKind(k);
-          if (k === "switch") applyKind(k, true);
-          if (k === "brightness") applyKind(k, 50);
-          if (k === "temperature") applyKind(k, 24);
-          if (k === "fanSpeed") applyKind(k, "mid");
-          if (k === "blindsOpen") applyKind(k, true);
+          const defaults: Record<DeviceCommandKind, unknown> = {
+            switch: true, brightness: 128, temperature: 24, fanSpeed: "mid", blindsOpen: true,
+          };
+          apply(k, defaults[k]);
         }}
         className="w-full rounded-lg px-3 py-2 text-sm text-white/95 bg-slate-800/80 border border-white/10"
       >
-        <option value="switch">Switch on/off</option>
+        <option value="switch">Power On / Off</option>
         <option value="brightness">Brightness</option>
         <option value="temperature">Temperature</option>
-        <option value="fanSpeed">Fan speed</option>
-        <option value="blindsOpen">Blinds open/close</option>
+        <option value="fanSpeed">Fan Speed</option>
+        <option value="blindsOpen">Blinds</option>
       </select>
+
       {kind === "switch" && (
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => applyKind("switch", true)}
-            className={`flex-1 rounded-lg py-2 text-sm ${cmd.switch === true ? "bg-emerald-500/20 text-emerald-300" : "bg-white/10 text-white/70"}`}
-          >
-            On
-          </button>
-          <button
-            type="button"
-            onClick={() => applyKind("switch", false)}
-            className={`flex-1 rounded-lg py-2 text-sm ${cmd.switch === false ? "bg-emerald-500/20 text-emerald-300" : "bg-white/10 text-white/70"}`}
-          >
-            Off
-          </button>
+        <div className="grid grid-cols-2 gap-2">
+          {[true, false].map((v) => (
+            <button key={String(v)} type="button" onClick={() => apply("switch", v)}
+              className={`rounded-lg py-2 text-sm font-medium transition ${
+                cmd.switch === v ? "bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/30" : "bg-white/5 text-white/60 hover:bg-white/10"
+              }`}
+            >
+              {v ? "On" : "Off"}
+            </button>
+          ))}
         </div>
       )}
       {kind === "brightness" && (
-        <div className="flex items-center gap-2">
-          <input
-            type="range"
-            min={0}
-            max={100}
+        <div className="flex items-center gap-3">
+          <span className="text-white/40 text-sm">💡</span>
+          <input type="range" min={0} max={100}
             value={typeof cmd.brightness === "number" ? Math.round((cmd.brightness / 255) * 100) : 50}
-            onChange={(e) => applyKind("brightness", Math.round((Number(e.target.value) / 100) * 255) || 1)}
+            onChange={(e) => apply("brightness", Math.round((Number(e.target.value) / 100) * 255) || 1)}
             className="flex-1 h-2 rounded-full accent-emerald-500"
           />
-          <span className="text-[0.75rem] text-white/50 w-8">
+          <span className="text-[0.8125rem] text-white/60 w-10 text-right">
             {typeof cmd.brightness === "number" ? Math.round((cmd.brightness / 255) * 100) : 50}%
           </span>
         </div>
       )}
       {kind === "temperature" && (
-        <input
-          type="number"
-          min={16}
-          max={30}
-          value={cmd.temperature ?? 24}
-          onChange={(e) => applyKind("temperature", Math.max(16, Math.min(30, Number(e.target.value))))}
-          className="w-full rounded-lg px-3 py-2 text-sm text-white/95 bg-slate-800/80 border border-white/10"
-        />
+        <div className="flex items-center gap-3">
+          <span className="text-white/40 text-sm">❄️</span>
+          <input type="range" min={16} max={30}
+            value={cmd.temperature ?? 24}
+            onChange={(e) => apply("temperature", Number(e.target.value))}
+            className="flex-1 h-2 rounded-full accent-blue-400"
+          />
+          <span className="text-[0.8125rem] text-white/60 w-10 text-right">{cmd.temperature ?? 24}°C</span>
+        </div>
       )}
       {kind === "fanSpeed" && (
-        <div className="flex flex-wrap gap-1">
+        <div className="grid grid-cols-4 gap-1.5">
           {FAN_SPEEDS.map((f) => (
-            <button
-              key={f}
-              type="button"
-              onClick={() => applyKind("fanSpeed", f)}
-              className={`rounded-lg px-2.5 py-1.5 text-[0.75rem] capitalize ${
-                cmd.fanSpeed === f ? "bg-emerald-500/20 text-emerald-300" : "bg-white/10 text-white/70"
+            <button key={f} type="button" onClick={() => apply("fanSpeed", f)}
+              className={`rounded-lg py-2 text-[0.75rem] font-medium capitalize transition ${
+                cmd.fanSpeed === f ? "bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/30" : "bg-white/5 text-white/60 hover:bg-white/10"
               }`}
             >
               {f}
@@ -558,21 +543,163 @@ function DeviceCommandEditor({
         </div>
       )}
       {kind === "blindsOpen" && (
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => applyKind("blindsOpen", true)}
-            className={`flex-1 rounded-lg py-2 text-sm ${cmd.blindsOpen === true ? "bg-emerald-500/20 text-emerald-300" : "bg-white/10 text-white/70"}`}
-          >
-            Open
-          </button>
-          <button
-            type="button"
-            onClick={() => applyKind("blindsOpen", false)}
-            className={`flex-1 rounded-lg py-2 text-sm ${cmd.blindsOpen === false ? "bg-emerald-500/20 text-emerald-300" : "bg-white/10 text-white/70"}`}
-          >
-            Close
-          </button>
+        <div className="grid grid-cols-2 gap-2">
+          {[true, false].map((v) => (
+            <button key={String(v)} type="button" onClick={() => apply("blindsOpen", v)}
+              className={`rounded-lg py-2 text-sm font-medium transition ${
+                cmd.blindsOpen === v ? "bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/30" : "bg-white/5 text-white/60 hover:bg-white/10"
+              }`}
+            >
+              {v ? "Open" : "Close"}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Task Create Editor ──────────────────────────────────────────────────── */
+
+function TaskCreateEditor({
+  action,
+  onChange,
+}: {
+  action: TaskCreateAction;
+  onChange: (action: TaskCreateAction) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      {/* Title */}
+      <input
+        type="text"
+        value={action.title}
+        onChange={(e) => onChange({ ...action, title: e.target.value })}
+        placeholder="What needs to be done?"
+        className="w-full rounded-lg px-3 py-2 text-sm text-white/95 bg-slate-800/80 border border-white/10"
+      />
+
+      {/* Priority */}
+      <div>
+        <label className="block text-[0.6875rem] text-white/50 mb-1.5">Priority</label>
+        <div className="grid grid-cols-2 gap-2">
+          {(["normal", "urgent"] as const).map((p) => (
+            <button
+              key={p}
+              type="button"
+              onClick={() => onChange({ ...action, priority: p })}
+              className={`rounded-lg py-2 text-[0.8125rem] font-medium capitalize transition ${
+                (action.priority ?? "normal") === p
+                  ? p === "urgent"
+                    ? "bg-rose-500/20 text-rose-300 ring-1 ring-rose-500/30"
+                    : "bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/30"
+                  : "bg-white/5 text-white/60 hover:bg-white/10"
+              }`}
+            >
+              {p}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Time window */}
+      <div>
+        <label className="block text-[0.6875rem] text-white/50 mb-1.5">Time Window</label>
+        <div className="grid grid-cols-3 gap-2">
+          {TIME_WINDOWS.map((tw) => (
+            <button
+              key={tw.value}
+              type="button"
+              onClick={() => onChange({ ...action, time_window: tw.value })}
+              className={`rounded-lg py-2 text-center transition ${
+                (action.time_window ?? "morning") === tw.value
+                  ? "bg-blue-500/20 text-blue-300 ring-1 ring-blue-500/30"
+                  : "bg-white/5 text-white/60 hover:bg-white/10"
+              }`}
+            >
+              <span className="text-[0.8125rem] font-medium block">{tw.label}</span>
+              <span className="text-[0.625rem] text-white/40">{tw.desc}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Music Editor ────────────────────────────────────────────────────────── */
+
+function MusicEditor({
+  action,
+  onChange,
+}: {
+  action: MusicModeAction;
+  onChange: (action: MusicModeAction) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      {/* Mode */}
+      <div>
+        <label className="block text-[0.6875rem] text-white/50 mb-1.5">Mode</label>
+        <div className="grid grid-cols-3 gap-2">
+          {(["play", "pause", "stop"] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => onChange({ ...action, mode: m })}
+              className={`rounded-lg py-2 text-[0.8125rem] font-medium capitalize transition ${
+                action.mode === m
+                  ? m === "stop"
+                    ? "bg-rose-500/20 text-rose-300 ring-1 ring-rose-500/30"
+                    : "bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/30"
+                  : "bg-white/5 text-white/60 hover:bg-white/10"
+              }`}
+            >
+              {m === "play" ? "▶ Play" : m === "pause" ? "⏸ Pause" : "⏹ Stop"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Genre (only when playing) */}
+      {action.mode === "play" && (
+        <div>
+          <label className="block text-[0.6875rem] text-white/50 mb-1.5">Genre</label>
+          <div className="flex flex-wrap gap-1.5">
+            {MUSIC_GENRES.map((g) => (
+              <button
+                key={g}
+                type="button"
+                onClick={() => onChange({ ...action, genre: g })}
+                className={`rounded-lg px-3 py-1.5 text-[0.75rem] font-medium transition ${
+                  (action.genre ?? "Quran") === g
+                    ? "bg-violet-500/20 text-violet-300 ring-1 ring-violet-500/30"
+                    : "bg-white/5 text-white/60 hover:bg-white/10"
+                }`}
+              >
+                {g}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Volume (play or pause) */}
+      {action.mode !== "stop" && (
+        <div>
+          <label className="block text-[0.6875rem] text-white/50 mb-1.5">Volume</label>
+          <div className="flex items-center gap-3">
+            <span className="text-white/40 text-sm">🔈</span>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={action.volume ?? 40}
+              onChange={(e) => onChange({ ...action, volume: Number(e.target.value) })}
+              className="flex-1 h-2 rounded-full accent-violet-500"
+            />
+            <span className="text-[0.8125rem] text-white/60 w-10 text-right">{action.volume ?? 40}%</span>
+          </div>
         </div>
       )}
     </div>
