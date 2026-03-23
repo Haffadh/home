@@ -163,7 +163,7 @@ export default function DashboardShell({
         className="fixed left-0 z-50 w-56 flex flex-col transition-transform duration-300 ease-out rounded-r-2xl"
         style={{
           top: "4rem",
-          height: "min(320px, calc(100vh - 6rem))",
+          maxHeight: "calc(100vh - 6rem)",
           transform: sidebarOpen ? "translateX(0)" : "translateX(-100%)",
           background: "rgba(18, 24, 38, 0.72)",
           backdropFilter: "blur(20px)",
