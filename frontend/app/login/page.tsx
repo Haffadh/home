@@ -39,7 +39,10 @@ export default function LoginPage() {
         body: JSON.stringify({ role: selectedRole }),
       });
       const data = await res.json();
-      if (data.accessToken) localStorage.setItem("token", data.accessToken);
+      if (data.accessToken) {
+        localStorage.setItem("token", data.accessToken);
+        localStorage.setItem("smarthub_token", data.accessToken);
+      }
     } catch { /* proceed */ }
     router.push(ROLE_DEFAULT_ROUTE[selectedRole]);
   }
