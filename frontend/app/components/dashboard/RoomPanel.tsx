@@ -209,7 +209,7 @@ export default function RoomPanel({ roomId, roomLabel }: RoomPanelProps) {
               return (
                 <div
                   key={d.id}
-                  className="rounded-2xl bg-slate-800/50 p-4 backdrop-blur-md border border-white/[0.06] flex flex-col gap-3 min-h-[120px]"
+                  className="rounded-2xl bg-[#1a1730]/50 p-4 backdrop-blur-md border border-white/[0.06] flex flex-col gap-3 min-h-[120px]"
                 >
                   <div className="flex items-center gap-2 shrink-0">
                     {updating ? (
@@ -331,7 +331,7 @@ export default function RoomPanel({ roomId, roomLabel }: RoomPanelProps) {
                 type="button"
                 onClick={() => sceneTrigger?.triggerScene(s.id)}
                 disabled={sceneTrigger?.activatingId != null}
-                className={`rounded-2xl bg-slate-800/50 p-4 backdrop-blur-md border flex flex-col items-center gap-2 hover:bg-slate-800/70 transition disabled:opacity-60 ${
+                className={`rounded-2xl bg-[#1a1730]/50 p-4 backdrop-blur-md border flex flex-col items-center gap-2 hover:bg-[#1a1730]/70 transition disabled:opacity-60 ${
                   sceneTrigger?.activeScene === s.id
                     ? "border-emerald-400/30 shadow-[0_0_12px_rgba(52,211,153,0.15)]"
                     : "border-white/[0.06]"
@@ -348,7 +348,7 @@ export default function RoomPanel({ roomId, roomLabel }: RoomPanelProps) {
         </section>
       )}
 
-      <section className="flex-[1] min-h-0 flex flex-col rounded-2xl bg-slate-900/50 backdrop-blur-md border border-white/[0.06] p-4">
+      <section className="flex-[1] min-h-0 flex flex-col rounded-2xl bg-[#12101e]/50 backdrop-blur-md border border-white/[0.06] p-4">
         <div className="flex items-center justify-between mb-3 shrink-0">
           <h2 className="text-xl font-semibold text-white/90">Room Tasks</h2>
           <button
@@ -361,18 +361,18 @@ export default function RoomPanel({ roomId, roomLabel }: RoomPanelProps) {
           </button>
         </div>
         {showAddTask && (
-          <div className="flex flex-wrap gap-2 mb-3 p-3 rounded-xl bg-slate-800/50">
+          <div className="flex flex-wrap gap-2 mb-3 p-3 rounded-xl bg-[#1a1730]/50">
             <input
               type="text"
               placeholder="Task title"
               value={addTaskTitle}
               onChange={(e) => setAddTaskTitle(e.target.value)}
-              className="flex-1 min-w-[140px] rounded-xl px-3.5 py-2.5 text-sm text-white/95 border border-white/10 bg-slate-800/80"
+              className="flex-1 min-w-[140px] rounded-xl px-3.5 py-2.5 text-sm text-white/95 border border-white/10 bg-[#1a1730]/80"
             />
             <select
               value={addTaskCategory}
               onChange={(e) => setAddTaskCategory(e.target.value)}
-              className="rounded-xl px-3.5 py-2.5 text-sm text-white/95 border border-white/10 bg-slate-800/80"
+              className="rounded-xl px-3.5 py-2.5 text-sm text-white/95 border border-white/10 bg-[#1a1730]/80"
             >
               {TASK_CATEGORIES.map((c) => (
                 <option key={c.value} value={c.value}>{c.label}</option>
@@ -395,7 +395,7 @@ export default function RoomPanel({ roomId, roomLabel }: RoomPanelProps) {
             roomTasks.map((t) => (
               <li
                 key={t.id}
-                className="flex items-center gap-3 rounded-xl bg-slate-800/40 px-3.5 py-2.5 border border-white/[0.04]"
+                className="flex items-center gap-3 rounded-xl bg-[#1a1730]/40 px-3.5 py-2.5 border border-white/[0.04]"
               >
                 <span className="text-base shrink-0">{getCategoryIcon(t.category ?? "misc")}</span>
                 <div className="min-w-0 flex-1">

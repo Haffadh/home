@@ -10,7 +10,7 @@ export default function GlassCard({
   style?: React.CSSProperties;
 }) {
   return (
-    <section className={`glass-card rounded-3xl p-6 bg-[#0f172a]/70 backdrop-blur-xl border border-white/10 shadow-xl transition hover:bg-[#0f172a]/80 active:scale-[0.99] flex flex-col min-h-0 ${className}`} style={style}>
+    <section className={`glass-card rounded-3xl p-6 bg-[#12101e]/70 backdrop-blur-xl border border-white/[0.08] shadow-xl transition hover:bg-[#12101e]/80 active:scale-[0.99] flex flex-col min-h-0 ${className}`} style={style}>
       {children}
     </section>
   );

@@ -166,7 +166,7 @@ export default function DashboardShell({
           top: "4rem",
           maxHeight: "calc(100vh - 6rem)",
           transform: sidebarOpen ? "translateX(0)" : "translateX(-100%)",
-          background: "rgba(18, 24, 38, 0.72)",
+          background: "rgba(18, 16, 30, 0.85)",
           backdropFilter: "blur(20px)",
           WebkitBackdropFilter: "blur(20px)",
           borderRight: "1px solid rgba(255, 255, 255, 0.05)",
@@ -191,8 +191,8 @@ export default function DashboardShell({
               relative rounded-xl px-3.5 py-2.5 text-[0.8125rem] font-medium
               transition-all duration-300 ease-out hover:scale-[1.02]
               ${isActive
-                ? "text-[#6EA8FF] bg-[rgba(110,168,255,0.06)] border border-[rgba(110,168,255,0.15)]"
-                : "text-white/60 border border-transparent hover:text-white/85 hover:bg-[#0f172a]/50"
+                ? "text-[#C4A1FF] bg-[rgba(196,161,255,0.06)] border border-[rgba(196,161,255,0.15)]"
+                : "text-white/60 border border-transparent hover:text-white/85 hover:bg-[#12101e]/50"
               }
             `;
             return (
@@ -221,7 +221,7 @@ export default function DashboardShell({
             <button
               type="button"
               onClick={() => setSidebarOpen(true)}
-              className="shrink-0 w-10 h-10 rounded-2xl flex flex-col items-center justify-center gap-1.5 bg-[#0f172a]/70 hover:bg-[#0f172a]/80 transition-all duration-300 ease-out hover:scale-[1.02]"
+              className="shrink-0 w-10 h-10 rounded-2xl flex flex-col items-center justify-center gap-1.5 bg-[#12101e]/70 hover:bg-[#12101e]/80 transition-all duration-300 ease-out hover:scale-[1.02]"
               aria-label="Open menu"
             >
               <span className="w-4 h-0.5 rounded-full bg-slate-400" />
@@ -271,7 +271,7 @@ export default function DashboardShell({
                     : "—:—:—"}
                 </span>
               </div>
-              <div className="flex items-center gap-2 rounded-full bg-[#0f172a]/70 px-4 py-2 backdrop-blur-xl border border-white/10 shadow-[0_4px_24px_rgba(0,0,0,0.12)]">
+              <div className="flex items-center gap-2 rounded-full bg-[#12101e]/70 px-4 py-2 backdrop-blur-xl border border-white/10 shadow-[0_4px_24px_rgba(0,0,0,0.12)]">
                 {weather ? (
                   <>
                     <span className="text-xl leading-none opacity-80" aria-hidden>

@@ -166,7 +166,7 @@ export default function SceneEditorModal({ scene, devices, onClose, onSave, defa
     >
       <div className="absolute inset-0" onClick={onClose} aria-hidden="true" />
       <div
-        className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-3xl bg-[#0f172a] border border-white/10 shadow-2xl"
+        className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-3xl bg-[#12101e] border border-white/10 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
@@ -229,7 +229,7 @@ export default function SceneEditorModal({ scene, devices, onClose, onSave, defa
               <select
                 value={room || ""}
                 onChange={(e) => setRoom(e.target.value || null)}
-                className="w-full rounded-xl px-4 py-2.5 text-white/95 bg-slate-800/80 border border-white/10 focus:border-white/20 focus:outline-none"
+                className="w-full rounded-xl px-4 py-2.5 text-white/95 bg-[#1a1730]/80 border border-white/10 focus:border-white/20 focus:outline-none"
               >
                 {SCENE_ROOMS.map((r) => (
                   <option key={r} value={r}>{r}</option>
@@ -246,7 +246,7 @@ export default function SceneEditorModal({ scene, devices, onClose, onSave, defa
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full rounded-xl px-4 py-2.5 text-white/95 bg-slate-800/80 border border-white/10 focus:border-white/20 focus:outline-none"
+                className="w-full rounded-xl px-4 py-2.5 text-white/95 bg-[#1a1730]/80 border border-white/10 focus:border-white/20 focus:outline-none"
                 placeholder="e.g. Bedtime"
               />
             </div>
@@ -288,7 +288,7 @@ export default function SceneEditorModal({ scene, devices, onClose, onSave, defa
               type="text"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="w-full rounded-xl px-4 py-2.5 text-white/95 bg-slate-800/80 border border-white/10 focus:border-white/20 focus:outline-none"
+              className="w-full rounded-xl px-4 py-2.5 text-white/95 bg-[#1a1730]/80 border border-white/10 focus:border-white/20 focus:outline-none"
               placeholder="Optional description"
             />
           </div>
@@ -321,7 +321,7 @@ export default function SceneEditorModal({ scene, devices, onClose, onSave, defa
               {actions.map((action, index) => (
                 <li
                   key={index}
-                  className="rounded-xl bg-slate-800/50 border border-white/10 p-3 space-y-3"
+                  className="rounded-xl bg-[#1a1730]/50 border border-white/10 p-3 space-y-3"
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-[0.75rem] font-medium text-white/60">
@@ -361,7 +361,7 @@ export default function SceneEditorModal({ scene, devices, onClose, onSave, defa
           </div>
 
           {/* Schedule — disabled */}
-          <div className="rounded-xl bg-slate-800/30 border border-white/10 p-4">
+          <div className="rounded-xl bg-[#1a1730]/30 border border-white/10 p-4">
             <div className="flex items-center justify-between">
               <label className="text-sm font-medium text-white/70">Schedule</label>
               <div className="flex items-center gap-2">
@@ -397,7 +397,7 @@ export default function SceneEditorModal({ scene, devices, onClose, onSave, defa
         {/* House-wide confirmation */}
         {showHouseConfirm && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60">
-            <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6 max-w-sm mx-4 text-center space-y-4">
+            <div className="bg-[#12101e] border border-white/10 rounded-2xl p-6 max-w-sm mx-4 text-center space-y-4">
               <p className="text-lg text-white/90">Create house-wide scene?</p>
               <p className="text-sm text-white/60">
                 This scene will affect all rooms and be visible to everyone.
@@ -463,7 +463,7 @@ function DeviceCommandEditor({
       <select
         value={deviceId}
         onChange={(e) => onChange({ ...action, deviceId: e.target.value || undefined })}
-        className="w-full rounded-lg px-3 py-2 text-sm text-white/95 bg-slate-800/80 border border-white/10"
+        className="w-full rounded-lg px-3 py-2 text-sm text-white/95 bg-[#1a1730]/80 border border-white/10"
       >
         <option value="">Select device</option>
         {devices.map((d) => (
@@ -483,7 +483,7 @@ function DeviceCommandEditor({
           };
           apply(k, defaults[k]);
         }}
-        className="w-full rounded-lg px-3 py-2 text-sm text-white/95 bg-slate-800/80 border border-white/10"
+        className="w-full rounded-lg px-3 py-2 text-sm text-white/95 bg-[#1a1730]/80 border border-white/10"
       >
         <option value="switch">Power On / Off</option>
         <option value="brightness">Brightness</option>
@@ -576,7 +576,7 @@ function TaskCreateEditor({
         value={action.title}
         onChange={(e) => onChange({ ...action, title: e.target.value })}
         placeholder="What needs to be done?"
-        className="w-full rounded-lg px-3 py-2 text-sm text-white/95 bg-slate-800/80 border border-white/10"
+        className="w-full rounded-lg px-3 py-2 text-sm text-white/95 bg-[#1a1730]/80 border border-white/10"
       />
 
       {/* Priority */}

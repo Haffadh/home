@@ -209,10 +209,10 @@ export default function UrgentTasksCard({ canEditTasks = true, readOnly = false,
               ))}
             </ul>
             {all.length > 4 && fadeTop && (
-              <div className="pointer-events-none absolute top-0 left-0 right-0 h-16 bg-gradient-to-b from-[#0f172a] via-[#0f172a]/80 to-transparent z-10 transition-opacity duration-300" />
+              <div className="pointer-events-none absolute top-0 left-0 right-0 h-16 bg-gradient-to-b from-[#12101e] via-[#0f172a]/80 to-transparent z-10 transition-opacity duration-300" />
             )}
             {all.length > 4 && fadeBottom && (
-              <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-[#0f172a] via-[#0f172a]/80 to-transparent z-10 transition-opacity duration-300" />
+              <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-[#12101e] via-[#0f172a]/80 to-transparent z-10 transition-opacity duration-300" />
             )}
           </div>
         )}

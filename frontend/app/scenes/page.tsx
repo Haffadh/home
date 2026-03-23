@@ -116,7 +116,7 @@ export default function ScenesPage() {
           <button
             type="button"
             onClick={() => setEditorScene("new")}
-            className="rounded-xl border border-white/10 bg-[#0f172a]/70 px-4 py-2.5 text-[0.8125rem] font-medium text-white/90 hover:bg-[#0f172a]/80 transition"
+            className="rounded-xl border border-white/10 bg-[#12101e]/70 px-4 py-2.5 text-[0.8125rem] font-medium text-white/90 hover:bg-[#12101e]/80 transition"
           >
             + New Scene
           </button>
@@ -155,7 +155,7 @@ export default function ScenesPage() {
       {loading ? (
         <p className="text-[0.8125rem] text-white/45">Loading...</p>
       ) : filteredScenes.length === 0 ? (
-        <div className="rounded-3xl bg-[#0f172a]/70 backdrop-blur-xl border border-white/10 p-8 text-center">
+        <div className="rounded-3xl bg-[#12101e]/70 backdrop-blur-xl border border-white/10 p-8 text-center">
           <p className="text-white/60 mb-4">
             {scenes.length === 0 ? "No scenes yet." : "No scenes match this filter."}
           </p>
@@ -174,7 +174,7 @@ export default function ScenesPage() {
           {filteredScenes.map((scene) => (
             <li
               key={scene.id}
-              className="rounded-3xl bg-[#0f172a]/70 backdrop-blur-xl border border-white/10 overflow-hidden transition hover:bg-[#0f172a]/80"
+              className="rounded-3xl bg-[#12101e]/70 backdrop-blur-xl border border-white/10 overflow-hidden transition hover:bg-[#12101e]/80"
             >
               <div className="p-5 flex flex-wrap items-center gap-4">
                 <span className="text-2xl shrink-0" aria-hidden>{scene.icon}</span>

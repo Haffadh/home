@@ -67,9 +67,9 @@ export default function ScenesCard({ readOnly = false }: ScenesCardProps) {
                   type="button"
                   onClick={() => triggerScene(s.id, readOnly)}
                   disabled={readOnly || (activatingId !== null && activatingId !== s.id)}
-                  className={`w-full shrink-0 h-[3.75rem] rounded-2xl bg-[#1e293b]/60 hover:bg-[#1e293b]/80 backdrop-blur-lg px-5 transition-all duration-500 active:scale-[0.96] text-left relative overflow-hidden before:content-[''] before:absolute before:inset-0 before:bg-white/5 before:opacity-0 before:transition-opacity active:before:opacity-100 disabled:opacity-60 flex items-center gap-4 border ${
+                  className={`w-full shrink-0 h-[3.75rem] rounded-2xl bg-white/[0.04] hover:bg-white/[0.07] backdrop-blur-lg px-5 transition-all duration-500 active:scale-[0.96] text-left relative overflow-hidden before:content-[''] before:absolute before:inset-0 before:bg-white/5 before:opacity-0 before:transition-opacity active:before:opacity-100 disabled:opacity-60 flex items-center gap-4 border ${
                     activeScene === s.id
-                      ? "border-emerald-400/30 shadow-[0_0_12px_rgba(52,211,153,0.15)]"
+                      ? "border-violet-400/30 shadow-[0_0_12px_rgba(167,139,250,0.15)]"
                       : "border-white/10"
                   }`}
                 >
@@ -94,10 +94,10 @@ export default function ScenesCard({ readOnly = false }: ScenesCardProps) {
               ))}
             </div>
             {scenes.length > 4 && fadeTop && (
-              <div className="pointer-events-none absolute top-0 left-0 right-0 h-16 bg-gradient-to-b from-[#0f172a] via-[#0f172a]/80 to-transparent z-10 transition-opacity duration-300" />
+              <div className="pointer-events-none absolute top-0 left-0 right-0 h-16 bg-gradient-to-b from-[#12101e] via-[#0f172a]/80 to-transparent z-10 transition-opacity duration-300" />
             )}
             {scenes.length > 4 && fadeBottom && (
-              <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-[#0f172a] via-[#0f172a]/80 to-transparent z-10 transition-opacity duration-300" />
+              <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-[#12101e] via-[#0f172a]/80 to-transparent z-10 transition-opacity duration-300" />
             )}
           </div>
         )}

@@ -53,6 +53,20 @@ type HouseBrainTasksCardProps = {
 };
 
 /* ─── Sortable row ─── */
+const CATEGORY_COLORS: Record<string, string> = {
+  cleaning: "rgba(59,130,246,0.5)",     // blue
+  cooking: "rgba(251,146,60,0.5)",      // orange
+  laundry: "rgba(168,85,247,0.5)",      // purple
+  shopping: "rgba(52,211,153,0.5)",     // emerald
+  maintenance: "rgba(251,191,36,0.5)",  // amber
+  errand: "rgba(244,114,182,0.5)",      // pink
+  misc: "rgba(148,163,184,0.4)",        // slate
+};
+
+function getCategoryAccent(category: string): string {
+  return CATEGORY_COLORS[category] ?? CATEGORY_COLORS.misc;
+}
+
 function SortableTaskRow({
   task, isHolding, onPressStart, onPressEnd, onClick, onContextMenu, readOnly,
 }: {
@@ -65,7 +79,7 @@ function SortableTaskRow({
   const style: React.CSSProperties = {
     opacity: isDragging ? 0.6 : 1,
     transform: isDragging ? undefined : isHolding ? "scale(0.97)" : undefined,
-    boxShadow: isHolding ? "0 0 20px rgba(120,180,255,0.25)" : undefined,
+    boxShadow: isHolding ? "0 0 20px rgba(167,139,250,0.25)" : undefined,
     ...(transform ? { transform: CSS.Transform.toString(transform) } : {}),
     transition,
   };
@@ -80,9 +94,10 @@ function SortableTaskRow({
         onTouchStart={(e) => !readOnly && onPressStart(e)}
         onTouchEnd={onPressEnd}
         onContextMenu={onContextMenu}
-        className="w-full flex items-center gap-3 rounded-2xl border border-white/[0.06] px-3.5 py-2.5 backdrop-blur-xl transition-all duration-300 ease-out text-left"
-        style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%)" }}
+        className="w-full flex items-center gap-3 rounded-2xl border border-white/[0.06] pl-1 pr-3.5 py-2.5 backdrop-blur-xl transition-all duration-300 ease-out text-left overflow-hidden"
+        style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.015) 100%)" }}
       >
+        <span className="shrink-0 w-1 self-stretch rounded-full" style={{ background: getCategoryAccent(task.category ?? "misc") }} />
         <span className="text-base shrink-0" aria-hidden>{getCategoryIcon(task.category ?? "misc")}</span>
         <div className="min-w-0 flex-1">
           {task.startTime && (
@@ -150,7 +165,7 @@ function TaskActionModal({
         )}
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={() => { onEdit(); onClose(); }}
-            className="rounded-2xl border border-white/10 bg-[#1e293b]/60 px-4 py-2.5 text-[0.8125rem] font-medium text-white/90 hover:bg-[#1e293b]/80 transition active:scale-[0.97]">
+            className="rounded-2xl border border-white/10 bg-[#1a1730]/60 px-4 py-2.5 text-[0.8125rem] font-medium text-white/90 hover:bg-[#1a1730]/80 transition active:scale-[0.97]">
             Edit
           </button>
           <button type="button" onClick={() => { onAskAI(); onClose(); }}
@@ -166,7 +181,7 @@ function TaskActionModal({
             Delete
           </button>
           <button type="button" onClick={onClose}
-            className="rounded-2xl border border-white/10 bg-[#0f172a]/70 px-4 py-2.5 text-[0.8125rem] font-medium text-white/70 hover:bg-[#0f172a]/80 transition ml-auto">
+            className="rounded-2xl border border-white/10 bg-[#12101e]/70 px-4 py-2.5 text-[0.8125rem] font-medium text-white/70 hover:bg-[#12101e]/80 transition ml-auto">
             Close
           </button>
         </div>
@@ -192,23 +207,23 @@ function EditTaskModal({ task, onClose, onSave }: {
           <div>
             <label className="block text-[0.6875rem] text-white/50 mb-1 uppercase tracking-wider">Title</label>
             <input type="text" value={title} onChange={(e) => setTitle(e.target.value)}
-              className="w-full rounded-xl px-3.5 py-2.5 text-[0.875rem] text-white/95 border border-white/10 bg-[#0f172a]/50 focus:outline-none focus:border-white/20" />
+              className="w-full rounded-xl px-3.5 py-2.5 text-[0.875rem] text-white/95 border border-white/10 bg-[#12101e]/50 focus:outline-none focus:border-white/20" />
           </div>
           <div>
             <label className="block text-[0.6875rem] text-white/50 mb-1 uppercase tracking-wider">Category</label>
             <select value={category} onChange={(e) => setCategory(e.target.value)}
-              className="w-full rounded-xl px-3.5 py-2.5 text-[0.875rem] text-white/95 border border-white/10 bg-[#0f172a]/50 focus:outline-none focus:border-white/20">
+              className="w-full rounded-xl px-3.5 py-2.5 text-[0.875rem] text-white/95 border border-white/10 bg-[#12101e]/50 focus:outline-none focus:border-white/20">
               {TASK_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.icon} {c.label}</option>)}
             </select>
           </div>
           <div>
             <label className="block text-[0.6875rem] text-white/50 mb-1 uppercase tracking-wider">Duration (min)</label>
             <input type="number" min={5} value={dur} onChange={(e) => setDur(parseInt(e.target.value, 10) || 15)}
-              className="w-full rounded-xl px-3.5 py-2.5 text-[0.875rem] text-white/95 border border-white/10 bg-[#0f172a]/50 focus:outline-none focus:border-white/20" />
+              className="w-full rounded-xl px-3.5 py-2.5 text-[0.875rem] text-white/95 border border-white/10 bg-[#12101e]/50 focus:outline-none focus:border-white/20" />
           </div>
         </div>
         <div className="flex gap-2">
-          <button type="button" onClick={onClose} className="flex-1 rounded-2xl border border-white/10 bg-[#0f172a]/70 py-2.5 text-[0.8125rem] font-medium text-white/80 hover:bg-[#0f172a]/80 transition">Cancel</button>
+          <button type="button" onClick={onClose} className="flex-1 rounded-2xl border border-white/10 bg-[#12101e]/70 py-2.5 text-[0.8125rem] font-medium text-white/80 hover:bg-[#12101e]/80 transition">Cancel</button>
           <button type="button" onClick={() => onSave({ title, category, durationMinutes: dur })}
             className="flex-1 rounded-2xl bg-[rgba(99,179,237,0.2)] border border-[rgba(99,179,237,0.3)] py-2.5 text-[0.8125rem] font-medium text-white/95 hover:bg-[rgba(99,179,237,0.25)]">Save</button>
         </div>
@@ -281,7 +296,7 @@ function AskAIModal({ taskTitle, onClose }: { taskTitle: string; onClose: () => 
           )}
         </div>
         <button type="button" onClick={onClose}
-          className="shrink-0 w-full rounded-2xl border border-white/10 bg-[#0f172a]/70 py-2.5 text-[0.8125rem] font-medium text-white/80 hover:bg-[#0f172a]/80 transition">
+          className="shrink-0 w-full rounded-2xl border border-white/10 bg-[#12101e]/70 py-2.5 text-[0.8125rem] font-medium text-white/80 hover:bg-[#12101e]/80 transition">
           Close
         </button>
       </div>
@@ -314,7 +329,7 @@ function SkipTaskModal({ task, onClose, onConfirm }: {
             </p>
             <div className="flex flex-col gap-2">
               <button type="button" onClick={() => setStep("when")}
-                className="w-full rounded-2xl border border-white/10 bg-[#1e293b]/60 px-4 py-3 text-[0.9375rem] font-medium text-white/90 hover:bg-[#1e293b]/80 transition text-left">
+                className="w-full rounded-2xl border border-white/10 bg-[#1a1730]/60 px-4 py-3 text-[0.9375rem] font-medium text-white/90 hover:bg-[#1a1730]/80 transition text-left">
                 Yes, remind me later
               </button>
               <button type="button" onClick={() => onConfirm(null)}
@@ -353,7 +368,7 @@ function SkipTaskModal({ task, onClose, onConfirm }: {
                 <label className="block text-[0.625rem] text-white/40 uppercase mb-1">Or pick a date</label>
                 <input type="date" value={selectedDate} min={today}
                   onChange={(e) => setSelectedDate(e.target.value)}
-                  className="w-full rounded-xl px-3.5 py-2.5 text-[0.875rem] text-white/95 border border-white/10 bg-[#0f172a]/50 outline-none" />
+                  className="w-full rounded-xl px-3.5 py-2.5 text-[0.875rem] text-white/95 border border-white/10 bg-[#12101e]/50 outline-none" />
               </div>
               {selectedDate && selectedDate !== today && (
                 <button type="button" onClick={() => setStep("time")}
@@ -380,7 +395,7 @@ function SkipTaskModal({ task, onClose, onConfirm }: {
             <div className="space-y-4 mb-5">
               <input type="time" value={selectedTime}
                 onChange={(e) => setSelectedTime(e.target.value)}
-                className="w-full rounded-xl px-3.5 py-3 text-[1rem] text-white/95 border border-white/10 bg-[#0f172a]/50 outline-none text-center" />
+                className="w-full rounded-xl px-3.5 py-3 text-[1rem] text-white/95 border border-white/10 bg-[#12101e]/50 outline-none text-center" />
               <button type="button"
                 disabled={isToday && !selectedTime}
                 onClick={() => onConfirm({ date: selectedDate, time: selectedTime || undefined })}
@@ -730,10 +745,10 @@ export default function HouseBrainTasksCard({
               </ul>
             </DndContext>
             {ordered.length > 4 && fadeTop && (
-              <div className="pointer-events-none absolute top-0 left-0 right-0 h-16 bg-gradient-to-b from-[#0f172a] via-[#0f172a]/80 to-transparent z-10 transition-opacity duration-300" />
+              <div className="pointer-events-none absolute top-0 left-0 right-0 h-16 bg-gradient-to-b from-[#12101e] via-[#0f172a]/80 to-transparent z-10 transition-opacity duration-300" />
             )}
             {ordered.length > 4 && fadeBottom && (
-              <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-[#0f172a] via-[#0f172a]/80 to-transparent z-10 transition-opacity duration-300" />
+              <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-[#12101e] via-[#0f172a]/80 to-transparent z-10 transition-opacity duration-300" />
             )}
           </div>
         )}

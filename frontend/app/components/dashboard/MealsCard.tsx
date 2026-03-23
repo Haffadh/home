@@ -373,7 +373,7 @@ export default function MealsCard({ readOnly = false }: MealsCardProps = {}) {
                     )}
                   </div>
                   <button type="button" onClick={() => { setShowPicker(false); setPickerSearch(""); }}
-                    className="shrink-0 w-full rounded-2xl border border-white/10 bg-[#0f172a]/70 py-2.5 text-[0.8125rem] text-white/60 transition">
+                    className="shrink-0 w-full rounded-2xl border border-white/10 bg-[#12101e]/70 py-2.5 text-[0.8125rem] text-white/60 transition">
                     Back
                   </button>
                 </div>
@@ -417,12 +417,12 @@ export default function MealsCard({ readOnly = false }: MealsCardProps = {}) {
                   <div className="flex gap-2 pt-2">
                     {!readOnly && (
                       <button type="button" onClick={() => setShowPicker(true)}
-                        className="flex-1 rounded-2xl border border-white/10 bg-[#1e293b]/60 py-2.5 text-[0.8125rem] font-medium text-white/90 hover:bg-[#1e293b]/80 transition">
+                        className="flex-1 rounded-2xl border border-white/10 bg-[#1a1730]/60 py-2.5 text-[0.8125rem] font-medium text-white/90 hover:bg-[#1a1730]/80 transition">
                         Change
                       </button>
                     )}
                     <button type="button" onClick={() => { setModalSlot(null); setShowPhotoUpload(false); }}
-                      className="flex-1 rounded-2xl border border-white/10 bg-[#0f172a]/70 py-2.5 text-[0.8125rem] text-white/60 transition">
+                      className="flex-1 rounded-2xl border border-white/10 bg-[#12101e]/70 py-2.5 text-[0.8125rem] text-white/60 transition">
                       Close
                     </button>
                   </div>
@@ -463,13 +463,13 @@ export default function MealsCard({ readOnly = false }: MealsCardProps = {}) {
                           {accepting ? "…" : "Accept"}
                         </button>
                         <button type="button" onClick={() => setShowPicker(true)}
-                          className="flex-1 rounded-2xl border border-white/10 bg-[#1e293b]/60 py-2.5 text-[0.8125rem] text-white/80 transition">
+                          className="flex-1 rounded-2xl border border-white/10 bg-[#1a1730]/60 py-2.5 text-[0.8125rem] text-white/80 transition">
                           Choose other
                         </button>
                       </>
                     )}
                     <button type="button" onClick={() => setModalSlot(null)}
-                      className={`${readOnly ? "flex-1" : ""} rounded-2xl border border-white/10 bg-[#0f172a]/70 py-2.5 px-4 text-[0.8125rem] text-white/60 transition`}>
+                      className={`${readOnly ? "flex-1" : ""} rounded-2xl border border-white/10 bg-[#12101e]/70 py-2.5 px-4 text-[0.8125rem] text-white/60 transition`}>
                       Close
                     </button>
                   </div>
@@ -479,12 +479,12 @@ export default function MealsCard({ readOnly = false }: MealsCardProps = {}) {
                   <p className="text-[0.875rem] text-white/40">No meal set and no suggestions available.</p>
                   {!readOnly && (
                     <button type="button" onClick={() => setShowPicker(true)}
-                      className="w-full rounded-2xl border border-white/10 bg-[#1e293b]/60 py-2.5 text-[0.8125rem] text-white/80 transition">
+                      className="w-full rounded-2xl border border-white/10 bg-[#1a1730]/60 py-2.5 text-[0.8125rem] text-white/80 transition">
                       Choose a dish
                     </button>
                   )}
                   <button type="button" onClick={() => setModalSlot(null)}
-                    className="w-full rounded-2xl border border-white/10 bg-[#0f172a]/70 py-2.5 text-[0.8125rem] text-white/60 transition">
+                    className="w-full rounded-2xl border border-white/10 bg-[#12101e]/70 py-2.5 text-[0.8125rem] text-white/60 transition">
                     Close
                   </button>
                 </div>
