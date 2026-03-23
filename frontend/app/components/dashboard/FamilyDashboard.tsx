@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { getStoredRole, ACTOR_NAME } from "../../../lib/roles";
 import type { Role } from "../../../lib/roles";
 import { getVisibleScenes } from "../../../lib/sceneVisibility";
@@ -36,9 +37,24 @@ export default function FamilyDashboard() {
   const activeScene = ctx?.activeScene ?? null;
   const sceneMessage = ctx?.sceneMessage ?? null;
 
+  const router = useRouter();
+  const tapCountRef = useRef(0);
+  const tapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => { setRole(getStoredRole()); }, []);
 
   const displayName = role ? (ACTOR_NAME[role as keyof typeof ACTOR_NAME] ?? role) : "";
+
+  function handleNameTap() {
+    tapCountRef.current += 1;
+    if (tapTimerRef.current) clearTimeout(tapTimerRef.current);
+    if (tapCountRef.current >= 3) {
+      tapCountRef.current = 0;
+      router.push("/panels");
+      return;
+    }
+    tapTimerRef.current = setTimeout(() => { tapCountRef.current = 0; }, 600);
+  }
 
   const loadScenes = useCallback(async () => {
     setScenesLoading(true);
@@ -70,7 +86,10 @@ export default function FamilyDashboard() {
           <p className="text-[0.8125rem] font-medium text-white/35 tracking-wide uppercase mb-2">
             {getGreeting()}
           </p>
-          <h1 className="text-[2.25rem] font-bold text-white tracking-tight leading-[1.1]">
+          <h1
+            className="text-[2.25rem] font-bold text-white tracking-tight leading-[1.1] cursor-default select-none"
+            onClick={handleNameTap}
+          >
             {displayName}
           </h1>
         </div>

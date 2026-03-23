@@ -30,11 +30,8 @@ export function useSceneTrigger() {
 
 const SIDEBAR_NAV = [
   { href: "/", label: "Dashboard" },
-  { href: "/inventory", label: "Inventory" },
   { href: "/scenes", label: "Scenes" },
-  { href: "/notifications", label: "Notifications" },
   { href: "/devices", label: "Devices" },
-  { href: "/panels", label: "Switch Panels" },
 ];
 
 function weatherIcon(icon: string): string {
