@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import GlassCard from "./GlassCard";
-import { useRealtimeEvent } from "../../context/RealtimeContext";
+import { useRealtime, useRealtimeEvent } from "../../context/RealtimeContext";
 
 import { getApiBase, withActorBody } from "../../../lib/api";
 import { formatTimeOnly } from "../../../lib/scheduling/formatTaskTimeRange";
@@ -56,6 +56,7 @@ export default function UrgentTasksCard({ canEditTasks = true, readOnly = false,
     return () => window.removeEventListener("midnight-rollover", onMidnight);
   }, [load]);
 
+  const realtime = useRealtime();
   useRealtimeEvent("urgent_updated", load);
 
   async function handleAddTask() {
@@ -71,6 +72,7 @@ export default function UrgentTasksCard({ canEditTasks = true, readOnly = false,
       setNewPriority(1);
       setShowAdd(false);
       await load();
+      realtime?.notify("urgent_updated");
     } catch {
       // ignore
     } finally {
@@ -81,13 +83,13 @@ export default function UrgentTasksCard({ canEditTasks = true, readOnly = false,
   async function toggleDone(task: UrgentTask) {
     if (readOnly) return;
     const next = !task.acknowledged;
-    // Optimistic update
     setTasks((prev) => prev.map((t) => t.id === task.id ? { ...t, acknowledged: next } : t));
     try {
       await getApiBase(`/api/urgent_tasks/${task.id}`, {
         method: "PATCH",
         body: withActorBody({ acknowledged: next }),
       });
+      realtime?.notify("urgent_updated");
     } catch {
       await load();
     }

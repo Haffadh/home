@@ -15,11 +15,12 @@ export type RolePermissionKey =
   | "chooseMeals";
 
 const FAMILY_PERMS: Partial<Record<RolePermissionKey, boolean>> = {
+  viewTasks: true,
+  createTasks: true,
+  createUrgent: true,
   delegateTasks: true,
   chooseMeals: true,
-  viewTasks: true,
   viewMenu: true,
-  createUrgent: true,
 };
 
 const ROOM_PERMS: Partial<Record<RolePermissionKey, boolean>> = {

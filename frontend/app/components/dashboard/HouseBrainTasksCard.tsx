@@ -14,7 +14,7 @@ import { CSS } from "@dnd-kit/utilities";
 import GlassCard from "./GlassCard";
 import { getCategoryIcon, getCategoryLabel } from "../../../lib/taskCategories";
 import { TASK_CATEGORIES } from "../../../lib/taskCategories";
-import { useRealtimeEvent } from "../../context/RealtimeContext";
+import { useRealtime, useRealtimeEvent } from "../../context/RealtimeContext";
 import { getApiBase, withActorBody } from "../../../lib/api";
 import { formatTaskTimeRange } from "../../../lib/scheduling/formatTaskTimeRange";
 import { getDefaultRoom, ALL_ROOMS } from "../../../lib/roles";
@@ -497,6 +497,7 @@ export default function HouseBrainTasksCard({
   }, [roomFilter, urgentOnly]);
 
   useEffect(() => { loadTasks(); }, [loadTasks]);
+  const realtime = useRealtime();
   useRealtimeEvent("tasks_updated", loadTasks);
 
   useEffect(() => {
@@ -544,6 +545,7 @@ export default function HouseBrainTasksCard({
       } else {
         await getApiBase(`/api/tasks/${task.id}`, { method: "PATCH", body: { status: "pending" } });
       }
+      realtime?.notify("tasks_updated");
     } catch {
       await loadTasks();
     }
@@ -554,6 +556,7 @@ export default function HouseBrainTasksCard({
     try {
       await getApiBase(`/api/tasks/${task.id}`, { method: "DELETE" });
       await loadTasks();
+      realtime?.notify("tasks_updated");
     } catch { /* ignore */ }
   }
 
@@ -578,6 +581,7 @@ export default function HouseBrainTasksCard({
       try {
         await getApiBase(`/api/tasks/${task.id}`, { method: "PATCH", body });
         await loadTasks();
+        realtime?.notify("tasks_updated");
       } catch { /* ignore */ }
     }
     setSkipTask(null);
@@ -592,6 +596,7 @@ export default function HouseBrainTasksCard({
     } catch { /* ignore */ }
     setEditTask(null);
     await loadTasks();
+    realtime?.notify("tasks_updated");
   }
 
   /* ─── Drag reorder ─── */
@@ -663,6 +668,7 @@ export default function HouseBrainTasksCard({
       setNewTime("");
       setShowAdd(false);
       await loadTasks();
+      realtime?.notify("tasks_updated");
     } catch { /* ignore */ }
     finally { setAdding(false); }
   }
