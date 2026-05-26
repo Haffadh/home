@@ -48,6 +48,12 @@ All routes accept `Authorization: Bearer <accessToken>`. The dev token `dev-toke
 - `POST /daily-tasks/:id/complete` — `{ date: YYYY-MM-DD }` (defaults to today).
 - `POST /daily-tasks/:id/skip` — same.
 
+### Meals (today's menu)
+
+- `GET  /meals?date=YYYY-MM-DD` — returns up to 3 rows (`breakfast`, `lunch`, `dinner`) for the date. Defaults to today.
+- `POST /meals` — **admin only**. Body: `{ date?, meal_type: "breakfast"|"lunch"|"dinner", name }`. Upserts on `(date, meal_type)` so calling it again for the same slot replaces the name.
+- `DELETE /meals/:id` — **admin only**.
+
 ### Urgent tasks
 
 - `GET  /urgent_tasks` — list (sorted: unack first, then priority desc).
@@ -63,8 +69,8 @@ All routes accept `Authorization: Bearer <accessToken>`. The dev token `dev-toke
 ## Frontend pages
 
 - `/login` — email + password sign in.
-- `/panel/abdullah` — Abdullah's task list with Done/Skip buttons.
-- `/panel/admin` — staff selector + create/list/soft-delete daily tasks.
+- `/panel/abdullah` — read-only menu at the top + task list with Done/Skip buttons.
+- `/panel/admin` — Today's Menu (3 inputs, save on blur) + staff selector + create/list/soft-delete daily tasks.
 
 ## End-to-end curl flow
 

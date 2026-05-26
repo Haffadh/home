@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type User = { id: number; name: string; role: string };
+type Meal = { id: number; date: string; meal_type: "breakfast" | "lunch" | "dinner"; name: string };
 type DailyTask = {
   id: number;
   title: string;
@@ -32,6 +33,13 @@ export default function AdminPage() {
   const [tasks, setTasks] = useState<DailyTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const [menu, setMenu] = useState<Record<"breakfast" | "lunch" | "dinner", string>>({
+    breakfast: "",
+    lunch: "",
+    dinner: "",
+  });
+  const [menuSaving, setMenuSaving] = useState<string | null>(null);
 
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
@@ -96,6 +104,21 @@ export default function AdminPage() {
     }
   }, [authFetch, staffId]);
 
+  const loadMenu = useCallback(async () => {
+    try {
+      const res = await authFetch(`/meals?date=${todayISO()}`);
+      const data = await res.json();
+      if (!res.ok || !data.ok) return;
+      const next = { breakfast: "", lunch: "", dinner: "" };
+      for (const m of data.meals as Meal[]) {
+        if (m.meal_type in next) next[m.meal_type] = m.name;
+      }
+      setMenu(next);
+    } catch {
+      // ignore
+    }
+  }, [authFetch]);
+
   useEffect(() => {
     void loadUsers();
   }, [loadUsers]);
@@ -103,6 +126,23 @@ export default function AdminPage() {
   useEffect(() => {
     void loadTasks();
   }, [loadTasks]);
+
+  useEffect(() => {
+    void loadMenu();
+  }, [loadMenu]);
+
+  async function saveMenuSlot(mealType: "breakfast" | "lunch" | "dinner", name: string) {
+    if (!name.trim()) return;
+    setMenuSaving(mealType);
+    try {
+      await authFetch("/meals", {
+        method: "POST",
+        body: JSON.stringify({ date: todayISO(), meal_type: mealType, name: name.trim() }),
+      });
+    } finally {
+      setMenuSaving(null);
+    }
+  }
 
   async function createTask(e: React.FormEvent) {
     e.preventDefault();
@@ -162,6 +202,25 @@ export default function AdminPage() {
           Sign out
         </button>
       </header>
+
+      <section className="mb-6 bg-slate-900/60 border border-white/5 rounded-2xl p-4">
+        <h2 className="text-base font-medium mb-3">Today's Menu</h2>
+        <div className="space-y-2">
+          {(["breakfast", "lunch", "dinner"] as const).map((slot) => (
+            <div key={slot} className="flex items-center gap-3">
+              <label className="w-24 text-sm text-white/60 capitalize">{slot}</label>
+              <input
+                value={menu[slot]}
+                onChange={(e) => setMenu((m) => ({ ...m, [slot]: e.target.value }))}
+                onBlur={(e) => saveMenuSlot(slot, e.target.value)}
+                placeholder={`What's for ${slot}?`}
+                className="flex-1 rounded-lg bg-slate-800 border border-white/10 px-3 py-2 text-white outline-none focus:border-blue-400"
+              />
+              {menuSaving === slot && <span className="text-xs text-white/40">saving…</span>}
+            </div>
+          ))}
+        </div>
+      </section>
 
       <section className="mb-6">
         <label className="block text-xs uppercase tracking-wide text-white/40 mb-2">Staff</label>
