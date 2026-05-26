@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest, isAuthError, parseBody, errorResponse } from "@/lib/server/middleware";
-import { analyzeInventoryPhoto } from "@/lib/server/services/openaiClient";
+import { analyzeInventoryPhoto } from "@/lib/server/services/anthropicClient";
 
 export async function POST(request: NextRequest) {
   const auth = authenticateRequest(request);

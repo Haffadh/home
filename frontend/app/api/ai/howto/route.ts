@@ -5,22 +5,22 @@ import {
   parseBody,
   errorResponse,
 } from "@/lib/server/middleware";
-import { generateHowToAnswer } from "@/lib/server/services/openaiClient";
+import { generateHowToAnswer } from "@/lib/server/services/anthropicClient";
 
 function mapErrorResponse(result: Record<string, unknown>) {
   const errType = String(result.error || "");
   const detail = String(result.detail || "Unknown error");
 
-  if (errType === "OPENAI_NO_CREDITS" || errType === "NO_CREDITS") {
-    return errorResponse(500, `OpenAI quota exceeded: ${detail}`);
+  if (errType === "ANTHROPIC_RATE_LIMIT") {
+    return errorResponse(500, `AI rate limited: ${detail}`);
   }
-  if (errType === "OPENAI_INVALID_KEY" || errType === "INVALID_KEY") {
-    return errorResponse(500, `Invalid OpenAI key: ${detail}`);
+  if (errType === "ANTHROPIC_INVALID_KEY") {
+    return errorResponse(500, `Invalid AI key: ${detail}`);
   }
-  if (errType === "OPENAI_ENV_MISSING" || errType === "ENV_MISSING") {
-    return errorResponse(500, `OpenAI not configured: ${detail}`);
+  if (errType === "ANTHROPIC_ENV_MISSING" || errType === "ENV_MISSING") {
+    return errorResponse(500, `AI not configured: ${detail}`);
   }
-  return errorResponse(500, `OpenAI error: ${detail}`);
+  return errorResponse(500, `AI error: ${detail}`);
 }
 
 async function handleHowTo(title: string, context?: string, type?: string) {

@@ -1,24 +1,21 @@
 /**
  * Ultra-intelligent meal suggestion engine.
- * Uses OpenAI with deep context: inventory, expiration, meal history,
+ * Uses Claude Haiku with deep context: inventory, expiration, meal history,
  * day-of-week awareness, variety scoring, and cultural preferences.
  */
 
+import Anthropic from "@anthropic-ai/sdk";
 import { getDb } from "../db";
 
-const DEFAULT_MODEL = "gpt-4o-mini";
+const MODEL = "claude-haiku-4-5";
 
-async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = 20000) {
-  const controller = new AbortController();
-  const t = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetch(url, { ...init, signal: controller.signal });
-  } finally {
-    clearTimeout(t);
-  }
+let _client: Anthropic | null = null;
+function getClient(): Anthropic | null {
+  if (!process.env.ANTHROPIC_API_KEY) return null;
+  if (_client) return _client;
+  _client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  return _client;
 }
-
-/* ── Context Gathering ────────────────────────────────────────────────────── */
 
 async function getMealHistory(days: number = 14): Promise<{ dish: string; date: string; type: string }[]> {
   try {
@@ -68,21 +65,20 @@ async function getInventoryContext(): Promise<{ available: string[]; expiringSoo
   }
 }
 
-/* ── Main Intelligence ────────────────────────────────────────────────────── */
-
 export async function getAIMealSuggestions(input?: {
   inventory?: string[];
   expiringSoon?: string[];
   householdSize?: number;
   slot?: "breakfast" | "lunch" | "dinner";
 }): Promise<{ meal: string; reason: string; missingIngredients: string[]; slot?: string }[]> {
-  const key = process.env.OPENAI_API_KEY;
-  if (!key) return [];
+  const client = getClient();
+  if (!client) return [];
 
-  // Gather rich context automatically
   const [history, inventoryCtx] = await Promise.all([
     getMealHistory(14),
-    input?.inventory ? Promise.resolve({ available: input.inventory, expiringSoon: input.expiringSoon ?? [] }) : getInventoryContext(),
+    input?.inventory
+      ? Promise.resolve({ available: input.inventory, expiringSoon: input.expiringSoon ?? [] })
+      : getInventoryContext(),
   ]);
 
   const householdSize = input?.householdSize ?? 6;
@@ -92,21 +88,16 @@ export async function getAIMealSuggestions(input?: {
   const hour = now.getHours();
   const currentSlot = input?.slot ?? (hour < 11 ? "breakfast" : hour < 16 ? "lunch" : "dinner");
 
-  // Analyze meal history for variety
-  const recentDishes = history.map(h => h.dish.toLowerCase());
+  const recentDishes = history.map((h) => h.dish.toLowerCase());
   const dishFrequency: Record<string, number> = {};
-  for (const d of recentDishes) {
-    dishFrequency[d] = (dishFrequency[d] ?? 0) + 1;
-  }
-  const overusedDishes = Object.entries(dishFrequency)
-    .filter(([, count]) => count >= 3)
-    .map(([dish]) => dish);
+  for (const d of recentDishes) dishFrequency[d] = (dishFrequency[d] ?? 0) + 1;
+  const overusedDishes = Object.entries(dishFrequency).filter(([, count]) => count >= 3).map(([dish]) => dish);
   const lastThreeDays = history
-    .filter(h => {
+    .filter((h) => {
       const d = new Date(h.date);
-      return (now.getTime() - d.getTime()) < 3 * 24 * 60 * 60 * 1000;
+      return now.getTime() - d.getTime() < 3 * 24 * 60 * 60 * 1000;
     })
-    .map(h => h.dish);
+    .map((h) => h.dish);
 
   const allowedMeals = [
     "Eggs", "Foul", "Avocado Toast", "Burrata", "Oatmeal", "Biscuits", "Yogurt",
@@ -123,7 +114,7 @@ export async function getAIMealSuggestions(input?: {
     "Halloumi in Tomato Sauce", "Dahl", "Charcoal Chicken",
     "Musakaa with Eggplant", "Kufta Kebab", "Mujadara",
     "Chicken Breast Pizza", "Noodles", "Qaliya Maslawiya",
-    "Creamy Beef Pink Pasta", "Chickpeas", "Balaleet", "Halloumi Mousaka"
+    "Creamy Beef Pink Pasta", "Chickpeas", "Balaleet", "Halloumi Mousaka",
   ];
 
   const system = `You are an elite private chef AI for the Al Abood household in Bahrain. You create deeply personalized meal suggestions.
@@ -142,7 +133,7 @@ PANTRY:
 - Expiring soon (PRIORITIZE these): ${inventoryCtx.expiringSoon.slice(0, 20).join(", ") || "none"}
 
 MEAL HISTORY (last 14 days):
-${history.length > 0 ? history.slice(0, 30).map(h => `  ${h.date} ${h.type}: ${h.dish}`).join("\n") : "  No recent history"}
+${history.length > 0 ? history.slice(0, 30).map((h) => `  ${h.date} ${h.type}: ${h.dish}`).join("\n") : "  No recent history"}
 
 VARIETY ANALYSIS:
 - Dishes eaten in last 3 days (AVOID repeating): ${lastThreeDays.join(", ") || "none"}
@@ -159,51 +150,41 @@ YOUR INTELLIGENCE RULES:
 8. Factor in Bahraini food culture: Thursday dinner is often special, Friday lunch is family gathering
 9. Give genuine, thoughtful reasons — not generic "matches inventory" but specific like "You haven't had seafood in 8 days and the shrimp expires tomorrow"
 
-Return ONLY a valid JSON object with key "suggestions" containing an array of 3-5 items.
+Return ONLY valid JSON (no markdown, no preamble) with key "suggestions" containing an array of 3-5 items.
 Each item: { "meal": "Exact Name From List", "reason": "Specific thoughtful reason", "missingIngredients": ["item1"], "slot": "${currentSlot}" }`;
 
   try {
-    const res = await fetchWithTimeout(
-      "https://api.openai.com/v1/chat/completions",
-      {
-        method: "POST",
-        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: process.env.OPENAI_MODEL || DEFAULT_MODEL,
-          messages: [
-            { role: "system", content: system },
-            { role: "user", content: `Suggest ${currentSlot} options for today (${dayName}). Be specific and thoughtful.` },
-          ],
-          response_format: { type: "json_object" },
-          max_tokens: 800,
-          temperature: 0.7,
-        }),
-      },
-      20000
-    );
+    const response = await client.messages.create({
+      model: MODEL,
+      max_tokens: 800,
+      system,
+      messages: [{ role: "user", content: `Suggest ${currentSlot} options for today (${dayName}). Be specific and thoughtful.` }],
+    });
 
-    const text = await res.text().catch(() => "");
-    if (!res.ok) return [];
+    const text = response.content
+      .filter((b): b is Anthropic.TextBlock => b.type === "text")
+      .map((b) => b.text)
+      .join("")
+      .trim();
 
-    let data = null;
-    try { data = JSON.parse(text); } catch { return []; }
+    if (!text) return [];
 
-    const content = data?.choices?.[0]?.message?.content;
-    if (!content || typeof content !== "string") return [];
-
+    const cleaned = text.replace(/^```json\s*/i, "").replace(/^```\s*/, "").replace(/\s*```$/, "").trim();
     let parsed: Record<string, unknown> | unknown[] | null = null;
-    try { parsed = JSON.parse(content); } catch {
-      const arrayMatch = content.match(/\[[\s\S]*\]/);
-      if (arrayMatch) { try { parsed = JSON.parse(arrayMatch[0]); } catch { return []; } }
+    try { parsed = JSON.parse(cleaned); } catch {
+      const arrMatch = cleaned.match(/\[[\s\S]*\]/);
+      const objMatch = cleaned.match(/\{[\s\S]*\}/);
+      const candidate = arrMatch?.[0] ?? objMatch?.[0];
+      if (candidate) { try { parsed = JSON.parse(candidate); } catch { return []; } }
       else return [];
     }
 
     const list = Array.isArray(parsed)
       ? parsed
       : Array.isArray((parsed as Record<string, unknown>)?.suggestions)
-        ? (parsed as Record<string, unknown>).suggestions as unknown[]
+        ? ((parsed as Record<string, unknown>).suggestions as unknown[])
         : Array.isArray((parsed as Record<string, unknown>)?.meals)
-          ? (parsed as Record<string, unknown>).meals as unknown[]
+          ? ((parsed as Record<string, unknown>).meals as unknown[])
           : [];
 
     return list
