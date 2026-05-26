@@ -1,185 +1,88 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import type { Role } from "@/lib/roles";
-import { USER_ROLES, LOGIN_LABELS, ROLE_PASSWORDS, ROLE_DEFAULT_ROUTE, STORAGE_KEY, ACTOR_NAME } from "@/lib/roles";
 import { getBaseUrl } from "@/lib/api";
 
-const ADMIN_PASSCODE = "3866";
+type LoginResponse = {
+  ok: boolean;
+  error?: string;
+  accessToken?: string;
+  refreshToken?: string;
+  user?: { id: number | string; name: string; email: string; role: string };
+};
 
 export default function LoginPage() {
   const router = useRouter();
-  const [step, setStep] = useState<"choose" | "users" | "password" | "admin">("choose");
-  const [selectedRole, setSelectedRole] = useState<Role | null>(null);
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  // Triple-tap the title to unlock admin
-  const tapsRef = useRef<{ count: number; timer: ReturnType<typeof setTimeout> | null }>({ count: 0, timer: null });
-  function handleTitleTap() {
-    const t = tapsRef.current;
-    t.count += 1;
-    if (t.timer) clearTimeout(t.timer);
-    t.timer = setTimeout(() => { t.count = 0; }, 600);
-    if (t.count >= 3) {
-      t.count = 0;
-      setSelectedRole("admin");
-      setStep("admin");
-    }
-  }
-
-  function handleSelect(role: Role) {
-    setSelectedRole(role);
-    setPassword("");
-    setError(false);
-    setStep("password");
-  }
-
-  async function doLogin(role: Role) {
-    if (typeof window !== "undefined") {
-      localStorage.setItem(STORAGE_KEY, role);
-      localStorage.setItem("shh_actor_name", ACTOR_NAME[role] || role);
-    }
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setBusy(true);
     try {
-      const res = await fetch(`${getBaseUrl()}/auth/role-login`, {
+      const res = await fetch(`${getBaseUrl()}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role }),
+        body: JSON.stringify({ email, password }),
       });
-      const data = await res.json();
-      if (data.accessToken) {
-        localStorage.setItem("token", data.accessToken);
-        localStorage.setItem("smarthub_token", data.accessToken);
+      const data: LoginResponse = await res.json();
+      if (!res.ok || !data.accessToken || !data.user) {
+        setError(data.error || "Login failed");
+        return;
       }
-    } catch { /* proceed */ }
-    router.push(ROLE_DEFAULT_ROUTE[role]);
-  }
-
-  async function handlePasswordSubmit() {
-    if (!selectedRole) return;
-    const correct = ROLE_PASSWORDS[selectedRole];
-    if (password !== correct) {
-      setError(true);
-      return;
+      localStorage.setItem("smarthub_token", data.accessToken);
+      localStorage.setItem("token", data.accessToken);
+      localStorage.setItem("shh_user_id", String(data.user.id));
+      localStorage.setItem("shh_user_name", data.user.name);
+      localStorage.setItem("shh_role", data.user.role);
+      router.push(data.user.role === "admin" ? "/panel/admin" : "/panel/abdullah");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Network error");
+    } finally {
+      setBusy(false);
     }
-    await doLogin(selectedRole);
-  }
-
-  async function handleAdminSubmit() {
-    if (password !== ADMIN_PASSCODE) {
-      setError(true);
-      return;
-    }
-    await doLogin("admin");
-  }
-
-  function goBack() {
-    setPassword("");
-    setError(false);
-    if (step === "password") { setStep("users"); setSelectedRole(null); }
-    else if (step === "admin") { setStep("choose"); setSelectedRole(null); }
-    else setStep("choose");
   }
 
   return (
-    <div
-      className="flex flex-col items-center justify-center min-h-[60vh] px-4"
-      style={{ paddingTop: "max(env(safe-area-inset-top), 1rem)", paddingBottom: "env(safe-area-inset-bottom)" }}
-    >
-      <h1
-        onClick={handleTitleTap}
-        className="text-2xl font-bold text-white/90 tracking-tight mb-2 cursor-default select-none"
-      >
-        Haffadh Home
-      </h1>
-
-      {step === "choose" && (
-        <>
-          <p className="text-[0.9375rem] text-white/50 mb-8">Who&apos;s logging in?</p>
-          <div className="flex flex-col gap-3 w-full max-w-xs">
-            <button type="button" onClick={() => setStep("users")}
-              className="w-full rounded-3xl border border-white/10 bg-[#0f172a]/70 px-5 py-4 text-[1rem] font-medium text-white/90 transition-all duration-300 ease-out hover:bg-[#0f172a]/80 hover:scale-[1.02] active:scale-[0.97] flex items-center justify-between">
-              <span>Family Members</span>
-              <span className="text-white/30">→</span>
-            </button>
-            <button type="button" onClick={() => handleSelect("kitchen")}
-              className="w-full rounded-3xl border border-white/10 bg-[#0f172a]/70 px-5 py-4 text-[1rem] font-medium text-white/90 transition-all duration-300 ease-out hover:bg-[#0f172a]/80 hover:scale-[1.02] active:scale-[0.97] flex items-center justify-between">
-              <span>Kitchen</span>
-              <span className="text-white/30">→</span>
-            </button>
-          </div>
-        </>
-      )}
-
-      {step === "users" && (
-        <>
-          <button type="button" onClick={goBack}
-            className="text-[0.8125rem] text-white/40 hover:text-white/70 transition mb-6">← Back</button>
-          <p className="text-[0.9375rem] text-white/50 mb-6">Select your name</p>
-          <div className="flex flex-col gap-3 w-full max-w-xs">
-            {USER_ROLES.map((role) => (
-              <button key={role} type="button" onClick={() => handleSelect(role)}
-                className="w-full rounded-3xl border border-white/10 bg-[#0f172a]/70 px-5 py-3.5 text-[1rem] font-medium text-white/90 transition-all duration-300 ease-out hover:bg-[#0f172a]/80 hover:scale-[1.02] active:scale-[0.97]">
-                {LOGIN_LABELS[role]}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-
-      {step === "password" && selectedRole && (
-        <>
-          <button type="button" onClick={goBack}
-            className="text-[0.8125rem] text-white/40 hover:text-white/70 transition mb-6">← Back</button>
-          <p className="text-[1.125rem] font-medium text-white/80 mb-1">{LOGIN_LABELS[selectedRole]}</p>
-          <p className="text-[0.8125rem] text-white/40 mb-6">Enter password</p>
-          <form onSubmit={(e) => { e.preventDefault(); handlePasswordSubmit(); }} className="w-full max-w-xs space-y-3">
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => { setPassword(e.target.value); setError(false); }}
-              placeholder="••••••"
-              autoFocus
-              className={`w-full text-center text-xl rounded-2xl border px-4 py-3 text-white/90 bg-[#0f172a]/70 outline-none transition ${
-                error ? "border-rose-400/50 bg-rose-500/5" : "border-white/10 focus:border-white/20"
-              }`}
-            />
-            {error && <p className="text-[0.8125rem] text-rose-400/80 text-center">Incorrect password</p>}
-            <button type="submit"
-              className="w-full rounded-2xl bg-blue-500/80 hover:bg-blue-500 py-3 text-[1rem] font-medium text-white transition">
-              Login
-            </button>
-          </form>
-        </>
-      )}
-
-      {step === "admin" && (
-        <>
-          <button type="button" onClick={goBack}
-            className="text-[0.8125rem] text-white/40 hover:text-white/70 transition mb-6">← Back</button>
-          <p className="text-[1.125rem] font-medium text-white/80 mb-1">Admin</p>
-          <p className="text-[0.8125rem] text-white/40 mb-6">Enter passcode</p>
-          <form onSubmit={(e) => { e.preventDefault(); handleAdminSubmit(); }} className="w-full max-w-xs space-y-3">
-            <input
-              type="password"
-              inputMode="numeric"
-              value={password}
-              onChange={(e) => { setPassword(e.target.value); setError(false); }}
-              placeholder="••••"
-              autoFocus
-              className={`w-full text-center text-xl rounded-2xl border px-4 py-3 text-white/90 bg-[#0f172a]/70 outline-none transition ${
-                error ? "border-rose-400/50 bg-rose-500/5" : "border-white/10 focus:border-white/20"
-              }`}
-            />
-            {error && <p className="text-[0.8125rem] text-rose-400/80 text-center">Incorrect passcode</p>}
-            <button type="submit"
-              className="w-full rounded-2xl bg-blue-500/80 hover:bg-blue-500 py-3 text-[1rem] font-medium text-white transition">
-              Unlock
-            </button>
-          </form>
-        </>
-      )}
+    <div className="min-h-screen flex items-center justify-center px-4">
+      <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-4 bg-slate-900/60 rounded-2xl p-6 border border-white/5">
+        <h1 className="text-2xl font-semibold">Sign in</h1>
+        <p className="text-sm text-white/50">Use your email and password.</p>
+        <div className="space-y-2">
+          <label className="block text-xs uppercase tracking-wide text-white/40">Email</label>
+          <input
+            type="email"
+            required
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="w-full rounded-lg bg-slate-800 border border-white/10 px-3 py-2 text-white outline-none focus:border-blue-400"
+          />
+        </div>
+        <div className="space-y-2">
+          <label className="block text-xs uppercase tracking-wide text-white/40">Password</label>
+          <input
+            type="password"
+            required
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full rounded-lg bg-slate-800 border border-white/10 px-3 py-2 text-white outline-none focus:border-blue-400"
+          />
+        </div>
+        {error && <p className="text-sm text-rose-400">{error}</p>}
+        <button
+          type="submit"
+          disabled={busy}
+          className="w-full rounded-lg bg-blue-500 hover:bg-blue-400 disabled:opacity-50 px-3 py-2 text-sm font-medium text-white transition"
+        >
+          {busy ? "Signing in…" : "Sign in"}
+        </button>
+      </form>
     </div>
   );
 }

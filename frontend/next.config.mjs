@@ -9,14 +9,15 @@ const nextConfig = {
   turbopack: {
     root: __dirname,
   },
-  // Rewrite /auth/* to /api/auth/* so the frontend auth calls work
-  // (original backend served auth routes at /auth/*, not /api/auth/*)
+  // Map clean URLs to /api/* routes so curl can hit /auth/login, /daily-tasks, etc.
   async rewrites() {
     return [
-      {
-        source: "/auth/:path*",
-        destination: "/api/auth/:path*",
-      },
+      { source: "/auth/:path*", destination: "/api/auth/:path*" },
+      { source: "/daily-tasks", destination: "/api/daily-tasks" },
+      { source: "/daily-tasks/:path*", destination: "/api/daily-tasks/:path*" },
+      { source: "/urgent_tasks", destination: "/api/urgent_tasks" },
+      { source: "/urgent_tasks/:path*", destination: "/api/urgent_tasks/:path*" },
+      { source: "/users", destination: "/api/users" },
     ];
   },
 };

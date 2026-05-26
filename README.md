@@ -1,144 +1,104 @@
-# Smart Home Hub
+# Abdullah Task Manager
 
-## Backend
+Minimal household task management. Abdullah signs in, sees his daily tasks, marks them done or skipped. Admin creates, edits, and deletes tasks.
 
-### Setup
+## Stack
 
-1. Install Node.js (v18+).
-2. Clone the repo and from the project root run:
+- Next.js 16 (App Router) — single app, no separate backend.
+- Supabase (Postgres) — auth users, daily_tasks, daily_task_instances, urgent_tasks, refresh_tokens, activity_log.
+- Custom JWT (scrypt password hashing, 30-day access tokens).
+
+## Setup
+
+1. Create a Supabase project at https://supabase.com/dashboard.
+2. Apply schema: open SQL Editor and run [`docs/schema.sql`](docs/schema.sql).
+3. Create `frontend/.env.local` with:
+   ```
+   NEXT_PUBLIC_SUPABASE_URL=https://<project>.supabase.co
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon key>
+   SUPABASE_SERVICE_ROLE_KEY=<service role key>   # required to bypass RLS
+   JWT_SECRET=<random 32+ char string>
+   NEXT_PUBLIC_API_BASE=
+   ```
+4. Install + run:
    ```bash
+   cd frontend
    npm install
+   npm run dev          # http://localhost:3000
+   npm run build        # production build
    ```
-3. Create a `.env` file in the project root with the required variables (see below).
-4. Ensure PostgreSQL is running and a database `smarthub` exists (see `schema.sql` if needed).
 
-### Required ENV
+## Endpoints
 
-Set these in `.env` at the project root. The server exits at startup if any are missing.
+All routes accept `Authorization: Bearer <accessToken>`. The dev token `dev-token` is accepted as `{ id: "dev", role: "admin" }`.
 
-| Variable | Description |
-|----------|-------------|
-| `TUYA_ACCESS_ID` | Tuya Cloud API access ID |
-| `TUYA_ACCESS_SECRET` | Tuya Cloud API access secret |
-| `TUYA_ENDPOINT` | Tuya API base URL (e.g. `https://openapi.tuyaeu.com`) |
-| `TUYA_DEVICE_IDS` | Comma-separated list of device IDs to expose via `/devices` |
+### Auth
 
-Optional:
+- `POST /auth/register` — `{ name, email, password, role }` → `{ ok, user, accessToken, refreshToken }`
+- `POST /auth/login` — `{ email, password }` → `{ ok, user, accessToken, refreshToken }`
+- `POST /auth/logout` — revoke refresh token
+- `POST /auth/refresh` — rotate refresh token
+- `GET  /auth/me` — `{ id, role }` from the bearer token
 
-- `PORT` – Server port (default: `3001`)
-- `OPENAI_API_KEY` – For `/ai/howto` and related features
+### Daily tasks
 
-### Run commands
+- `GET  /daily-tasks?staff_user_id=<id>&date=YYYY-MM-DD` — list a staff user's tasks for the date, with the per-day instance (`pending`/`done`/`skipped`) materialized.
+- `POST /daily-tasks` — create. Body: `{ staff_user_id, title, notes?, window_start, window_end, recurrence: "none"|"daily"|"weekly"|"monthly"|"custom", recurrence_days?, start_date?, end_date?, room?, category? }`.
+- `PATCH /daily-tasks/:id` — update any of `title, notes, window_start, window_end, timezone, recurrence, recurrence_days, start_date, end_date, is_active`. Use `is_active: false` for soft delete.
+- `POST /daily-tasks/:id/complete` — `{ date: YYYY-MM-DD }` (defaults to today).
+- `POST /daily-tasks/:id/skip` — same.
 
-```bash
-# Install dependencies
-npm install
+### Urgent tasks
 
-# Start the backend server
-npm start
-# or
-node server.js
-```
+- `GET  /urgent_tasks` — list (sorted: unack first, then priority desc).
+- `POST /urgent_tasks` — create.
+- `PATCH /urgent_tasks/:id` — update.
+- `POST /urgent_tasks/:id/ack` — acknowledge.
 
-Server listens on `http://localhost:3001` by default (or the value of `PORT`).
+### Users
 
-### Example API calls
+- `GET /api/users` — list all users (admin convenience).
+- `GET /api/health` — health check.
 
-```bash
-# Health check
-curl -s http://localhost:3001/health
+## Frontend pages
 
-# List devices (filtered by TUYA_DEVICE_IDS)
-curl -s http://localhost:3001/devices
+- `/login` — email + password sign in.
+- `/panel/abdullah` — Abdullah's task list with Done/Skip buttons.
+- `/panel/admin` — staff selector + create/list/soft-delete daily tasks.
 
-# Toggle device on/off (body: { "on": true } or { "on": false })
-curl -s -X POST http://localhost:3001/devices/YOUR_DEVICE_ID/toggle \
-  -H "Content-Type: application/json" \
-  -d '{"on": true}'
-
-# Same via /switch
-curl -s -X POST http://localhost:3001/devices/YOUR_DEVICE_ID/switch \
-  -H "Content-Type: application/json" \
-  -d '{"on": false}'
-```
-
-All error responses use the format `{ "ok": false, "error": "<message>" }`. Success responses use `{ "ok": true, ... }` (and optionally `data` or other keys).
-
----
-
-## Daily Tasks (staff)
-
-Time-windowed tasks for household staff with optional recurrence (none / daily / weekly). Tasks are stored in Postgres; instances are materialized on-demand for a given date. Staff can mark tasks **Done** or **Skip** for that day (no smart-home triggering).
-
-### Run instructions
-
-1. **Run migrations** (from project root, with Postgres running and `smarthub` DB created):
-   ```bash
-   psql -d smarthub -f migrations/001_daily_tasks.sql
-   ```
-   This creates `daily_tasks` and `daily_task_instances` and ensures at least one `staff` user exists if none present.
-
-2. **Start backend**: `npm start` (or `node server.js`).
-
-3. **Start frontend** (from `frontend/`): `npm run dev`. Open http://localhost:3000/todays-tasks.
-
-### Example API calls (Daily Tasks)
+## End-to-end curl flow
 
 ```bash
-# List tasks for a staff user and date (instances materialized on demand)
-curl -s "http://localhost:3001/daily-tasks?staff_user_id=1&date=2025-02-12"
-
-# Create a task (time window, recurrence, start/end date)
-curl -s -X POST http://localhost:3001/daily-tasks \
+# 1. Register
+curl -X POST http://localhost:3000/auth/register \
   -H "Content-Type: application/json" \
-  -d '{
-    "staff_user_id": 1,
-    "title": "Morning cleanup",
-    "notes": "Kitchen and living room",
-    "window_start": "07:00",
-    "window_end": "08:00",
-    "timezone": "Asia/Bahrain",
-    "recurrence": "daily",
-    "start_date": "2025-02-12"
-  }'
+  -d '{"name":"Abdullah","email":"abdullah@example.com","password":"Abdullah#1","role":"abdullah"}'
 
-# Mark today’s instance as done (idempotent)
-curl -s -X POST http://localhost:3001/daily-tasks/1/complete \
+# 2. Login → grab accessToken
+TOKEN=$(curl -s -X POST http://localhost:3000/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"date": "2025-02-12"}'
+  -d '{"email":"abdullah@example.com","password":"Abdullah#1"}' \
+  | python3 -c "import sys,json;print(json.load(sys.stdin)['accessToken'])")
 
-# Mark today’s instance as skipped
-curl -s -X POST http://localhost:3001/daily-tasks/1/skip \
+# 3. Create a daily task for user id 1
+curl -X POST http://localhost:3000/daily-tasks \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"date": "2025-02-12"}'
+  -d '{"staff_user_id":1,"title":"Take out the trash","window_start":"08:00","window_end":"10:00","recurrence":"daily"}'
 
-# Update a task
-curl -s -X PATCH http://localhost:3001/daily-tasks/1 \
+# 4. List today's tasks
+curl "http://localhost:3000/daily-tasks?staff_user_id=1&date=$(date -u +%Y-%m-%d)" \
+  -H "Authorization: Bearer $TOKEN"
+
+# 5. Complete task id 1
+curl -X POST "http://localhost:3000/daily-tasks/1/complete" \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"title": "Updated title", "window_end": "09:00"}'
+  -d "{\"date\":\"$(date -u +%Y-%m-%d)\"}"
 ```
 
----
+## Notes
 
-## Repo hygiene
-
-- **`.env`** is ignored; copy **`.env.example`** to `.env` and fill in values. Do not commit `.env`.
-- If **`node_modules`** or **`.npm-cache`** were ever committed, remove from git index (no delete on disk):
-  ```bash
-  git rm -r --cached node_modules 2>/dev/null || true
-  git rm -r --cached .npm-cache 2>/dev/null || true
-  ```
-- If you see **`fatal: Unable to create '.git/index.lock'`**: another git process may be running, or a previous run crashed. Remove the lock only when you are sure no other git command is running: `rm -f .git/index.lock`. See [Git docs](https://git-scm.com/docs/git-index) if unsure.
-
----
-
-## Checklist (run migrations, server, verify)
-
-| Step | Command / action |
-|------|------------------|
-| 1. Run migrations | `psql -d smarthub -f migrations/001_daily_tasks.sql` |
-| 2. Start backend | `npm start` (root) |
-| 3. Verify health | `curl -s http://localhost:3001/health` → `{"ok":true}` |
-| 4. Verify daily-tasks | `curl -s "http://localhost:3001/daily-tasks?staff_user_id=1&date=$(date +%Y-%m-%d)"` → `{"ok":true,"tasks":[...],"date":"..."}` |
-| 5. Start frontend | `cd frontend && npm run dev` |
-| 6. Open UI | http://localhost:3000 and http://localhost:3000/todays-tasks |
+- URL rewrites in `frontend/next.config.mjs` map clean paths (`/auth/*`, `/daily-tasks/*`, `/urgent_tasks/*`, `/users`) to the underlying `/api/*` Next.js handlers.
+- Soft delete only — use `PATCH /daily-tasks/:id` with `{ "is_active": false }`. The instance history is preserved.
+- All write operations require a valid Bearer token. Service role key on the server bypasses Supabase RLS.

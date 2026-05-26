@@ -56,13 +56,13 @@ export const ACTOR_NAME: Record<Role, string> = {
 };
 
 export const ROLE_DEFAULT_ROUTE: Record<Role, string> = {
-  moeen: "/panel/house",
-  samya: "/panel/house",
-  nawaf: "/panel/house",
-  ahmed: "/panel/house",
-  mariam: "/panel/house",
-  abdullah: "/panel/house",
-  kitchen: "/panel/kitchen",
+  moeen: "/panel/abdullah",
+  samya: "/panel/abdullah",
+  nawaf: "/panel/abdullah",
+  ahmed: "/panel/abdullah",
+  mariam: "/panel/abdullah",
+  abdullah: "/panel/abdullah",
+  kitchen: "/panel/abdullah",
   admin: "/panel/admin",
 };
 
