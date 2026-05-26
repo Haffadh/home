@@ -3,15 +3,15 @@ import { signToken } from "@/lib/server/auth";
 import { parseBody, errorResponse } from "@/lib/server/middleware";
 
 const VALID_ROLES = [
-  "house",
-  "kitchen",
+  "moeen",
+  "samya",
+  "nawaf",
+  "ahmed",
+  "mariam",
   "abdullah",
-  "winklevi_room",
-  "mariam_room",
-  "master_bedroom",
-  "dining_room",
-  "living_room",
+  "kitchen",
   "admin",
+  "house",
 ];
 
 export async function POST(request: Request) {

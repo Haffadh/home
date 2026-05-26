@@ -150,12 +150,14 @@ function InventoryAuditRow({
 }) {
   const [qty, setQty] = useState(String(item.quantity));
   const [exp, setExp] = useState(item.expiration_date?.slice(0, 10) ?? "");
-  const isFood = item.category === "Food";
-
-  useEffect(() => {
+  const [prevSig, setPrevSig] = useState(`${item.id}|${item.quantity}|${item.expiration_date ?? ""}`);
+  const sig = `${item.id}|${item.quantity}|${item.expiration_date ?? ""}`;
+  if (sig !== prevSig) {
+    setPrevSig(sig);
     setQty(String(item.quantity));
     setExp(item.expiration_date?.slice(0, 10) ?? "");
-  }, [item.id, item.quantity, item.expiration_date]);
+  }
+  const isFood = item.category === "Food";
 
   function handleQtyBlur() {
     const n = parseInt(qty, 10);

@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { getSupabaseClient } from "../../lib/supabaseClient";
 
 type RealtimeContextValue = {
@@ -71,7 +71,7 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
     }
 
     // ── Polling fallback (always active, catches anything Realtime misses) ──
-    setConnected(true);
+    Promise.resolve().then(() => setConnected(true));
     pollRef.current = setInterval(() => {
       dispatchRealtime("tasks_updated");
       dispatchRealtime("urgent_updated");
@@ -112,7 +112,9 @@ export function useRealtime() {
 /** Subscribe to realtime events. Uses a ref for the callback so subscription is stable. */
 export function useRealtimeEvent(event: string, onEvent: () => void) {
   const onEventRef = useRef(onEvent);
-  onEventRef.current = onEvent;
+  useLayoutEffect(() => {
+    onEventRef.current = onEvent;
+  });
 
   useEffect(() => {
     const handler = (e: Event) => {

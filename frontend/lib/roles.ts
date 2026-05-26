@@ -6,14 +6,9 @@ export type Role =
   | "mariam"
   | "abdullah"
   | "kitchen"
-  | "living_room"
-  | "dining_room"
-  | "master_bedroom"
-  | "winklevi_room"
-  | "mariam_room"
   | "admin";
 
-/** User roles — real family members */
+/** User roles — family members + helper */
 export const USER_ROLES: Role[] = [
   "moeen",
   "samya",
@@ -21,16 +16,6 @@ export const USER_ROLES: Role[] = [
   "ahmed",
   "mariam",
   "abdullah",
-];
-
-/** Room roles — device panels */
-export const ROOM_ROLES: Role[] = [
-  "kitchen",
-  "living_room",
-  "dining_room",
-  "master_bedroom",
-  "winklevi_room",
-  "mariam_room",
 ];
 
 export const ROLE_LABELS: Record<Role, string> = {
@@ -41,32 +26,12 @@ export const ROLE_LABELS: Record<Role, string> = {
   mariam: "Mariam",
   abdullah: "Abdullah",
   kitchen: "Kitchen",
-  living_room: "Living Room",
-  dining_room: "Dining Room",
-  master_bedroom: "Master Bedroom",
-  winklevi_room: "Winklevi Room",
-  mariam_room: "Mariam Room",
   admin: "Admin",
 };
 
-/** Display name for login buttons */
-export const LOGIN_LABELS: Record<Role, string> = {
-  moeen: "Moeen",
-  samya: "Samya",
-  nawaf: "Nawaf",
-  ahmed: "Ahmed",
-  mariam: "Mariam",
-  abdullah: "Abdullah",
-  kitchen: "Kitchen",
-  living_room: "Living Room",
-  dining_room: "Dining Room",
-  master_bedroom: "Master Bedroom",
-  winklevi_room: "Winklevi Room",
-  mariam_room: "Mariam Room",
-  admin: "Admin",
-};
+export const LOGIN_LABELS: Record<Role, string> = { ...ROLE_LABELS };
 
-/** Password for each role: Name#1 (first word capitalized) */
+/** Password for each role: Name#1 */
 export const ROLE_PASSWORDS: Record<Role, string> = {
   moeen: "Moeen#1",
   samya: "Samya#1",
@@ -75,11 +40,6 @@ export const ROLE_PASSWORDS: Record<Role, string> = {
   mariam: "Mariam#1",
   abdullah: "Abdullah#1",
   kitchen: "Kitchen#1",
-  living_room: "Living#1",
-  dining_room: "Dining#1",
-  master_bedroom: "Master#1",
-  winklevi_room: "Winklevi#1",
-  mariam_room: "Mariam#1",
   admin: "Admin#1",
 };
 
@@ -92,11 +52,6 @@ export const ACTOR_NAME: Record<Role, string> = {
   mariam: "Mariam",
   abdullah: "Abdullah",
   kitchen: "Kitchen",
-  living_room: "Living Room",
-  dining_room: "Dining Room",
-  master_bedroom: "Master Bedroom",
-  winklevi_room: "Winklevi Room",
-  mariam_room: "Mariam Room",
   admin: "Admin",
 };
 
@@ -106,17 +61,12 @@ export const ROLE_DEFAULT_ROUTE: Record<Role, string> = {
   nawaf: "/panel/house",
   ahmed: "/panel/house",
   mariam: "/panel/house",
-  abdullah: "/panel/abdullah",
+  abdullah: "/panel/house",
   kitchen: "/panel/kitchen",
-  living_room: "/panel/living_room",
-  dining_room: "/panel/dining_room",
-  master_bedroom: "/panel/master_bedroom",
-  winklevi_room: "/panel/winklevi_room",
-  mariam_room: "/panel/mariam_room",
   admin: "/panel/admin",
 };
 
-/** Default room for each user (auto-detected when creating tasks) */
+/** Default room for each user (auto-assigned when creating tasks) */
 export const USER_DEFAULT_ROOM: Record<string, string> = {
   moeen: "Master Bedroom",
   samya: "Master Bedroom",
@@ -125,14 +75,9 @@ export const USER_DEFAULT_ROOM: Record<string, string> = {
   mariam: "Mariam Room",
   abdullah: "Kitchen",
   kitchen: "Kitchen",
-  living_room: "Living Room",
-  dining_room: "Dining Room",
-  master_bedroom: "Master Bedroom",
-  winklevi_room: "Winklevi Room",
-  mariam_room: "Mariam Room",
 };
 
-/** All rooms available for task assignment */
+/** All rooms available for task assignment (metadata only, no dedicated panels) */
 export const ALL_ROOMS = [
   "Kitchen",
   "Living Room",
@@ -153,16 +98,24 @@ export function getDefaultRoom(): string {
 
 export const STORAGE_KEY = "shh_role";
 
-const VALID_ROLES: Role[] = [...USER_ROLES, ...ROOM_ROLES, "admin"];
+const VALID_ROLES: Role[] = [...USER_ROLES, "kitchen", "admin"];
 
-/** Kept for backward compat — all non-admin roles */
 export const VISIBLE_ROLES = VALID_ROLES.filter((r) => r !== "admin");
 
 export function getStoredRole(): Role | null {
   if (typeof window === "undefined") return null;
   const v = localStorage.getItem(STORAGE_KEY);
   if (v && VALID_ROLES.includes(v as Role)) return v as Role;
-  // Backward compat: "house" → first user role
-  if (v === "house") return "moeen";
+  // Backward compat: legacy "house" / removed room roles → map to Moeen as fallback family member
+  if (
+    v === "house" ||
+    v === "winklevi_room" ||
+    v === "mariam_room" ||
+    v === "master_bedroom" ||
+    v === "dining_room" ||
+    v === "living_room"
+  ) {
+    return "moeen";
+  }
   return null;
 }

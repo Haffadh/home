@@ -153,7 +153,7 @@ function SortableTaskRow({
         }}
       >
         <span className="shrink-0 text-xs tabular-nums opacity-70 min-w-[7rem]">
-          {formatTaskTimeRange(task.startTime, task.endTime ?? new Date(new Date(task.startTime).getTime() + (task.durationMinutes ?? 60) * 60000).toISOString(), task.durationMinutes)}
+          {formatTaskTimeRange(task.startTime, task.endTime, task.durationMinutes, task.date)}
         </span>
         <span className={`min-w-0 flex-1 truncate text-[0.875rem] text-white/90 ${task.status === "completed" ? "line-through" : ""}`}>{task.title}</span>
         {task.status !== "completed" && !readOnly && canReorder && (
@@ -216,7 +216,7 @@ function TaskActionModal({
           <div className="flex justify-between gap-4">
             <dt className="text-white/50">Time</dt>
             <dd className="text-white/90">
-              {formatTaskTimeRange(task.startTime, task.endTime ?? new Date(new Date(task.startTime).getTime() + (task.durationMinutes ?? 60) * 60000).toISOString(), task.durationMinutes)}
+              {formatTaskTimeRange(task.startTime, task.endTime, task.durationMinutes, task.date)}
             </dd>
           </div>
           <div className="flex justify-between gap-4">
@@ -745,7 +745,7 @@ export default function DailyTasksCard({ readOnly = false, canEditTasks = true, 
                         }}
                       >
                         <span className="shrink-0 text-xs tabular-nums opacity-70 min-w-[7rem]">
-                          {formatTaskTimeRange(t.startTime, t.endTime ?? new Date(new Date(t.startTime).getTime() + (t.durationMinutes ?? 60) * 60000).toISOString(), t.durationMinutes)}
+                          {formatTaskTimeRange(t.startTime, t.endTime, t.durationMinutes, t.date)}
                         </span>
                         <span className="min-w-0 flex-1 truncate text-[0.875rem] text-white/90 line-through">{t.title}</span>
                       </button>

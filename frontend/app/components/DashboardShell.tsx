@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import type { Role } from "../../lib/roles";
-import { ROLE_LABELS, getStoredRole } from "../../lib/roles";
+import { getStoredRole } from "../../lib/roles";
 import { can } from "../../lib/permissions";
 import { getApiBase } from "../../lib/api";
 import GatheringModal from "./dashboard/GatheringModal";
@@ -124,12 +124,6 @@ export default function DashboardShell({
   const closeSidebar = () => setSidebarOpen(false);
   const isHome = pathname === "/" || pathname.startsWith("/panel/");
   const isFamilyPanel = pathname === "/panel/house";
-  const isRoomPanel = /^\/panel\/(winklevi_room|mariam_room|master_bedroom|dining_room|living_room)$/.test(pathname);
-  const roomSegment = pathname.replace(/^\/panel\//, "");
-  const roomName = isRoomPanel && roomSegment ? (ROLE_LABELS[roomSegment as Role] ?? roomSegment) : null;
-  useEffect(() => {
-    if (isRoomPanel) setSidebarOpen(false);
-  }, [isRoomPanel]);
 
   useEffect(() => {
     if (isHome && !isFamilyPanel) {
@@ -160,8 +154,8 @@ export default function DashboardShell({
       <aside
         className="fixed left-0 z-50 w-56 flex flex-col transition-transform duration-300 ease-out rounded-r-2xl"
         style={{
-          top: "4rem",
-          maxHeight: "calc(100vh - 6rem)",
+          top: "calc(4rem + env(safe-area-inset-top))",
+          maxHeight: "calc(100vh - 6rem - env(safe-area-inset-top) - env(safe-area-inset-bottom))",
           transform: sidebarOpen ? "translateX(0)" : "translateX(-100%)",
           background: "rgba(18, 16, 30, 0.85)",
           backdropFilter: "blur(20px)",
@@ -207,7 +201,10 @@ export default function DashboardShell({
       </aside>
 
       <div className="flex-1 flex flex-col min-w-0 min-h-0 relative z-10">
-        <header className={`relative shrink-0 flex items-center justify-between gap-6 px-4 md:px-8 py-4 ${isFamilyPanel ? "h-14" : "h-24"}`}>
+        <header
+          className={`relative shrink-0 flex items-center justify-between gap-6 px-4 md:px-8 py-4 ${isFamilyPanel ? "min-h-14" : "min-h-24"}`}
+          style={{ paddingTop: "max(env(safe-area-inset-top), 1rem)" }}
+        >
           <div
             className="absolute inset-0 pointer-events-none"
             style={{
@@ -231,7 +228,7 @@ export default function DashboardShell({
               className="block min-w-0"
             >
               <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-purple-400 via-violet-300 to-amber-300 bg-clip-text text-transparent truncate">
-                {roomName ?? "Haffadh Home"}
+                Haffadh Home
               </h1>
             </Link>
           </div>

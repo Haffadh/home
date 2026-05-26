@@ -15,17 +15,24 @@ export default function RequireRole({ allowedRoles, children }: RequireRoleProps
   const [allowed, setAllowed] = useState<boolean | null>(null);
 
   useEffect(() => {
-    const role = getStoredRole();
-    if (!role) {
-      router.replace("/login");
-      return;
-    }
-    if (!allowedRoles.includes(role)) {
-      router.replace(ROLE_DEFAULT_ROUTE[role as keyof typeof ROLE_DEFAULT_ROUTE]);
-      return;
-    }
-    setAllowed(true);
-  }, [router]);
+    let cancelled = false;
+    Promise.resolve().then(() => {
+      if (cancelled) return;
+      const role = getStoredRole();
+      if (!role) {
+        router.replace("/login");
+        return;
+      }
+      if (!allowedRoles.includes(role)) {
+        router.replace(ROLE_DEFAULT_ROUTE[role as keyof typeof ROLE_DEFAULT_ROUTE]);
+        return;
+      }
+      setAllowed(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [router, allowedRoles]);
 
   if (allowed !== true) return null;
   return <>{children}</>;

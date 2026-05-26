@@ -68,14 +68,15 @@ export function GlobalRealtimeProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    const channels = channelsRef.current;
+    const listeners = listenersRef.current;
     return () => {
-      const channels = channelsRef.current;
       const client = getSupabaseClient();
       channels.forEach((ch) => {
         if (client) client.removeChannel(ch as never);
       });
       channels.clear();
-      listenersRef.current.clear();
+      listeners.clear();
     };
   }, []);
 

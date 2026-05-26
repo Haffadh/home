@@ -21,6 +21,21 @@ export type Device = {
 
 const DEVICE_DOMAINS = new Set(["light", "switch", "climate", "cover", "fan", "input_boolean"]);
 
+type HassEntity = {
+  entity_id: string;
+  state: string;
+  last_updated?: string;
+  attributes?: {
+    friendly_name?: string;
+    brightness?: unknown;
+    temperature?: unknown;
+    current_temperature?: unknown;
+    fan_mode?: string;
+    current_position?: unknown;
+    area_id?: string;
+  };
+};
+
 function domainToType(domain: string): string {
   if (domain === "light") return "light";
   if (domain === "climate") return "ac";
@@ -29,8 +44,7 @@ function domainToType(domain: string): string {
   return "switch";
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function entityToDevice(entity: any, roomMap: Record<string, string>): Device {
+function entityToDevice(entity: HassEntity, roomMap: Record<string, string>): Device {
   const id = entity.entity_id;
   const domain = id.split(".")[0];
   const attr = entity.attributes || {};
@@ -60,19 +74,18 @@ function parseDeviceRooms(str: string): Record<string, string> {
   return map;
 }
 
-export async function getDevices(forceRefresh = false): Promise<Device[]> {
+export async function getDevices(): Promise<Device[]> {
   if (!isConfigured()) return [];
-  const allStates = await fetchAllStates();
+  const allStates = (await fetchAllStates()) as HassEntity[];
   const roomMap = parseDeviceRooms(process.env.HASS_DEVICE_ROOMS || "");
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return allStates
-    .filter((e: any) => DEVICE_DOMAINS.has(e.entity_id.split(".")[0]))
-    .map((e: any) => entityToDevice(e, roomMap));
+    .filter((e) => DEVICE_DOMAINS.has(e.entity_id.split(".")[0]))
+    .map((e) => entityToDevice(e, roomMap));
 }
 
 export async function getDeviceStatus(deviceId: string): Promise<Device> {
   if (!isConfigured()) throw new Error("Home Assistant not configured");
-  const entity = await fetchEntityState(deviceId);
+  const entity = (await fetchEntityState(deviceId)) as HassEntity;
   const roomMap = parseDeviceRooms(process.env.HASS_DEVICE_ROOMS || "");
   return entityToDevice(entity, roomMap);
 }

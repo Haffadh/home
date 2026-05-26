@@ -7,7 +7,7 @@ import { getApiBase, withActorBody } from "../../../lib/api";
 import { useRealtimeEvent } from "../../context/RealtimeContext";
 import { runMealIntelligenceForSlot } from "../../../lib/meals/runMealIntelligence";
 import type { MealSuggestionResult } from "../../../lib/meals/runMealIntelligence";
-import { BREAKFAST_ITEMS, LUNCH_ITEMS, DINNER_ITEMS, DISH_SUB_OPTIONS, SOUP_ITEMS, LUNCH_ITEMS_BY_PROTEIN } from "../../../data/menu";
+import { BREAKFAST_ITEMS, LUNCH_ITEMS, DINNER_ITEMS, DISH_SUB_OPTIONS, SOUP_ITEMS, LUNCH_ITEMS_BY_PROTEIN, DRINK_OPTIONS } from "../../../data/menu";
 import { MEAL_INGREDIENTS } from "../../../lib/meals/mealIngredients";
 
 type MealSlot = "breakfast" | "lunch" | "dinner";
@@ -48,6 +48,7 @@ export default function MealsCard({ readOnly = false }: MealsCardProps = {}) {
   const [imageClickCount, setImageClickCount] = useState(0);
   const [showPhotoUpload, setShowPhotoUpload] = useState(false);
   const [subOptions, setSubOptions] = useState<{ dish: string; step: number; choices: string[] } | null>(null);
+  const [pendingDrink, setPendingDrink] = useState<{ slot: MealSlot; dish: string } | null>(null);
   const [portionSize, setPortionSize] = useState(6);
   const [inventoryNames, setInventoryNames] = useState<Set<string>>(new Set());
 
@@ -227,15 +228,28 @@ export default function MealsCard({ readOnly = false }: MealsCardProps = {}) {
     }
   }
 
-  async function chooseDish(slot: MealSlot, dish: string) {
+  function chooseDish(slot: MealSlot, dish: string) {
+    // Instead of saving immediately, prompt for drink first
+    setShowPicker(false);
+    setPickerSearch("");
+    setPendingDrink({ slot, dish });
+  }
+
+  async function saveDishWithDrink(drink: string | null) {
+    if (!pendingDrink) return;
     setAccepting(true);
     try {
+      const body: Record<string, unknown> = {
+        type: pendingDrink.slot,
+        dish: pendingDrink.dish,
+        portions: portionSize,
+      };
+      if (drink) body.drink = drink;
       await getApiBase("/api/meals", {
         method: "POST",
-        body: withActorBody({ type: slot, dish, portions: portionSize }),
+        body: withActorBody(body),
       });
-      setShowPicker(false);
-      setPickerSearch("");
+      setPendingDrink(null);
       setModalSlot(null);
       await loadMeals();
     } catch { /* ignore */ }
@@ -253,11 +267,11 @@ export default function MealsCard({ readOnly = false }: MealsCardProps = {}) {
             const hasMeal = meal && meal.dish;
 
             return (
-              <div key={key}>
+              <div key={key} className="h-full">
                 <button
                   type="button"
                   onClick={() => openMealModal(key)}
-                  className="w-full text-left relative rounded-3xl border border-white/[0.06] p-5 backdrop-blur-xl transition-all duration-300 ease-out hover:-translate-y-1 hover:scale-[1.01]"
+                  className="w-full h-full min-h-[128px] text-left relative rounded-3xl border border-white/[0.06] p-5 backdrop-blur-xl transition-all duration-300 ease-out hover:-translate-y-1 hover:scale-[1.01] flex flex-col items-start justify-start"
                   style={{
                     background: suggestion
                       ? "linear-gradient(180deg, rgba(139,92,246,0.12) 0%, rgba(59,130,246,0.06) 100%)"
@@ -335,12 +349,42 @@ export default function MealsCard({ readOnly = false }: MealsCardProps = {}) {
                       className="text-[0.75rem] text-white/40 hover:text-white/60">Cancel</button>
                   </div>
                 );
-              })() : showPicker ? (
+              })() : pendingDrink ? (
+                <div className="flex-1 min-h-0 flex flex-col gap-4">
+                  <div>
+                    <h3 className="text-lg font-semibold text-white/95">{pendingDrink.dish}</h3>
+                    <p className="text-[0.8125rem] text-white/55 mt-0.5">Choose a drink</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {DRINK_OPTIONS.map((d) => (
+                      <button key={d} type="button" onClick={() => saveDishWithDrink(d)} disabled={accepting}
+                        className="rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-[0.875rem] text-white/85 hover:bg-white/10 disabled:opacity-50 transition">
+                        {d}
+                      </button>
+                    ))}
+                  </div>
+                  <button type="button" onClick={() => saveDishWithDrink(null)} disabled={accepting}
+                    className="rounded-xl border border-white/10 bg-[#12101e]/70 px-3 py-2.5 text-[0.8125rem] text-white/60 hover:text-white/80 disabled:opacity-50 transition">
+                    Skip — no drink
+                  </button>
+                  <button type="button" onClick={() => { setPendingDrink(null); setShowPicker(true); }} disabled={accepting}
+                    className="shrink-0 w-full rounded-2xl border border-white/10 bg-[#12101e]/70 py-2.5 text-[0.8125rem] text-white/50 transition">
+                    Back
+                  </button>
+                </div>
+              ) : showPicker ? (
                 <div className="flex-1 min-h-0 flex flex-col gap-3">
                   <h3 className="text-lg font-semibold text-white/95">Choose a dish</h3>
                   <input type="text" value={pickerSearch} onChange={(e) => setPickerSearch(e.target.value)}
-                    placeholder="Search menu…" autoFocus
+                    placeholder="Search or type a custom dish…" autoFocus
                     className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-[0.875rem] text-white/90 placeholder:text-white/25 outline-none" />
+                  {pickerSearch.trim() && !MENU_BY_SLOT[modalSlot].some((d) => d.toLowerCase() === pickerSearch.trim().toLowerCase()) && (
+                    <button type="button" onClick={() => chooseDish(modalSlot, pickerSearch.trim())} disabled={accepting}
+                      className="shrink-0 w-full rounded-xl border border-violet-400/30 bg-violet-500/15 px-3.5 py-2.5 text-[0.875rem] text-violet-100 hover:bg-violet-500/25 transition flex items-center justify-between gap-2">
+                      <span className="truncate">Add &ldquo;{pickerSearch.trim()}&rdquo;</span>
+                      <span className="shrink-0 text-[0.625rem] text-violet-200/70 uppercase tracking-wider">Custom</span>
+                    </button>
+                  )}
                   <div className="flex-1 min-h-0 overflow-y-auto space-y-1">
                     {modalSlot === "lunch" && !pickerSearch ? (
                       /* Categorized lunch menu */

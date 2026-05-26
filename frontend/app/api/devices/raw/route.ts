@@ -7,7 +7,7 @@ export async function GET(request: NextRequest) {
   if (isAuthError(auth)) return auth;
 
   try {
-    const devices = await getDevices(true);
+    const devices = await getDevices();
     return NextResponse.json({ ok: true, devices });
   } catch (e) {
     return errorResponse(500, e instanceof Error ? e.message : "Failed to fetch raw devices");

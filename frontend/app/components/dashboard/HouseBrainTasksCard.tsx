@@ -17,6 +17,7 @@ import { TASK_CATEGORIES } from "../../../lib/taskCategories";
 import { useRealtime, useRealtimeEvent } from "../../context/RealtimeContext";
 import { getApiBase, withActorBody } from "../../../lib/api";
 import { formatTaskTimeRange } from "../../../lib/scheduling/formatTaskTimeRange";
+import { safeDate } from "../../../lib/scheduling/safeDate";
 import { getDefaultRoom, ALL_ROOMS } from "../../../lib/roles";
 
 const LONG_PRESS_MS = 600;
@@ -102,11 +103,7 @@ function SortableTaskRow({
         <div className="min-w-0 flex-1">
           {task.startTime && (
             <p className="text-[0.6875rem] text-white/50 tabular-nums">
-              {formatTaskTimeRange(
-                task.startTime,
-                task.endTime ?? new Date(new Date(task.startTime).getTime() + task.durationMinutes * 60000).toISOString(),
-                task.durationMinutes
-              )}
+              {formatTaskTimeRange(task.startTime, task.endTime, task.durationMinutes, task.date)}
             </p>
           )}
           <p className="text-[0.875rem] font-medium text-white/90 truncate">{task.title}</p>
@@ -150,11 +147,7 @@ function TaskActionModal({
             <div className="flex justify-between gap-4">
               <dt className="text-white/50">Time</dt>
               <dd className="text-white/90">
-                {formatTaskTimeRange(
-                  task.startTime,
-                  task.endTime ?? new Date(new Date(task.startTime).getTime() + task.durationMinutes * 60000).toISOString(),
-                  task.durationMinutes
-                )}
+                {formatTaskTimeRange(task.startTime, task.endTime, task.durationMinutes, task.date)}
               </dd>
             </div>
             <div className="flex justify-between gap-4">

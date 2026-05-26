@@ -50,7 +50,7 @@ export default function FamilyDashboard() {
     if (tapTimerRef.current) clearTimeout(tapTimerRef.current);
     if (tapCountRef.current >= 3) {
       tapCountRef.current = 0;
-      router.push("/panels");
+      router.push("/login");
       return;
     }
     tapTimerRef.current = setTimeout(() => { tapCountRef.current = 0; }, 600);

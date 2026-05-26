@@ -28,8 +28,6 @@ type Item = {
   default_location: string | null;
 };
 
-type AuditItem = { name: string; estimatedQuantity: number; unit: string; category: string };
-
 function expiryStatus(d: string | null): "ok" | "soon" | "expired" | "none" {
   if (!d) return "none";
   const today = new Date().toISOString().slice(0, 10);
@@ -300,6 +298,8 @@ function AuditModal({ inventoryItems, onClose, onDone }: {
               ) : (
                 <div className="space-y-3">
                   <div className="rounded-2xl overflow-hidden border border-white/10">
+                    {/* Local data-URL preview — next/image not applicable */}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={image} alt="Audit" className="w-full max-h-40 object-cover" />
                   </div>
                   <div className="flex gap-2">

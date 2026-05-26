@@ -47,6 +47,12 @@ export default function UrgentAlertOverlay() {
   const [acknowledging, setAcknowledging] = useState(false);
   const chimeRef = useRef<{ start: () => void; stop: () => void } | null>(null);
 
+  const stopAlert = useCallback(() => {
+    if (chimeRef.current) { chimeRef.current.stop(); chimeRef.current = null; }
+    setAlert(null);
+    setAcknowledging(false);
+  }, []);
+
   // Listen for urgent_alert events
   useRealtimeEvent("urgent_alert", useCallback(() => {
     // The event data comes through the CustomEvent detail
@@ -65,7 +71,7 @@ export default function UrgentAlertOverlay() {
     };
     window.addEventListener("realtime", handler);
     return () => window.removeEventListener("realtime", handler);
-  }, []);
+  }, [stopAlert]);
 
   // Start/stop sound when alert changes
   useEffect(() => {
@@ -77,12 +83,6 @@ export default function UrgentAlertOverlay() {
       if (chimeRef.current) { chimeRef.current.stop(); chimeRef.current = null; }
     };
   }, [alert]);
-
-  function stopAlert() {
-    if (chimeRef.current) { chimeRef.current.stop(); chimeRef.current = null; }
-    setAlert(null);
-    setAcknowledging(false);
-  }
 
   async function handleAcknowledge() {
     if (!alert || acknowledging) return;

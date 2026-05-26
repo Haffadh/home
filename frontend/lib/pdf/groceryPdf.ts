@@ -19,7 +19,6 @@ const CATEGORY_ORDER = ["Food", "Cleaning", "Household", "Other"] as const;
 const FONT = "helvetica";
 const MARGIN = 24;
 const PAGE_W = 210;
-const CONTENT_W = PAGE_W - MARGIN * 2;
 
 function categorySortKey(category: string | null): number {
   const i = CATEGORY_ORDER.indexOf(category as (typeof CATEGORY_ORDER)[number]);

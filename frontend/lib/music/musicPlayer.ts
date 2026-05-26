@@ -21,14 +21,20 @@ let playing = false;
 let onStateChange: (() => void) | null = null;
 
 // ─── YouTube iframe state ───
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let ytPlayer: any = null;
+type YTPlayer = {
+  destroy: () => void;
+  setVolume: (v: number) => void;
+  playVideo: () => void;
+  pauseVideo: () => void;
+  stopVideo: () => void;
+};
+let ytPlayer: YTPlayer | null = null;
 let ytReady = false;
 const ytContainerId = "yt-music-player";
 let ytApiLoaded = false;
 
 declare global {
-  interface Window { YT?: { Player: new (id: string, opts: Record<string, unknown>) => any }; onYouTubeIframeAPIReady?: () => void; }
+  interface Window { YT?: { Player: new (id: string, opts: Record<string, unknown>) => YTPlayer }; onYouTubeIframeAPIReady?: () => void; }
 }
 
 function notifyChange() { onStateChange?.(); }

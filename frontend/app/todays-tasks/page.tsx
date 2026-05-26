@@ -17,10 +17,6 @@ const TIME_WINDOWS = [
 
 type Task = UITask;
 
-function formatDateKey(iso: string): string {
-  return new Date(iso).toISOString().slice(0, 10);
-}
-
 function todayKey(): string {
   return new Date().toISOString().slice(0, 10);
 }

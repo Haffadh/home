@@ -49,35 +49,52 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const stored = typeof window !== "undefined" ? localStorage.getItem(AUTH_TOKEN_KEY) : null;
-    if (!stored) {
-      setLoading(false);
-      return;
-    }
-    setToken(stored);
-    getApiBase("/auth/me", { cache: "no-store" })
-      .then((data) => {
+    let cancelled = false;
+    const run = async () => {
+      const stored = typeof window !== "undefined" ? localStorage.getItem(AUTH_TOKEN_KEY) : null;
+      if (!stored) {
+        if (!cancelled) setLoading(false);
+        return;
+      }
+      if (!cancelled) setToken(stored);
+      try {
+        const data = await getApiBase("/auth/me", { cache: "no-store" });
+        if (cancelled) return;
         const d = data as { id?: string; role?: string };
         setUser({ id: String(d.id), role: String(d.role ?? "") });
-      })
-      .catch(() => {
+      } catch {
+        if (cancelled) return;
         if (typeof window !== "undefined") {
           localStorage.removeItem(AUTH_TOKEN_KEY);
         }
         setToken(null);
         setUser(null);
-      })
-      .finally(() => setLoading(false));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // When Supabase session is restored (or confirmed absent), allow API calls to run.
   useEffect(() => {
-    const supabase = getSupabaseClient();
-    if (!supabase) {
-      setSessionReady(true);
-      return;
-    }
-    supabase.auth.getSession().then(() => setSessionReady(true));
+    let cancelled = false;
+    const run = async () => {
+      const supabase = getSupabaseClient();
+      if (!supabase) {
+        if (!cancelled) setSessionReady(true);
+        return;
+      }
+      await supabase.auth.getSession();
+      if (!cancelled) setSessionReady(true);
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const value: AuthContextValue = {

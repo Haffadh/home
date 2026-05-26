@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { useGlobalRealtime } from "@/app/context/GlobalRealtimeContext";
 
 export type RealtimeTableCallback = () => void;
@@ -14,7 +14,9 @@ export type RealtimeTableCallback = () => void;
 export function useRealtimeTable(table: string, onChange: RealtimeTableCallback): void {
   const ctx = useGlobalRealtime();
   const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
+  useLayoutEffect(() => {
+    onChangeRef.current = onChange;
+  });
 
   useEffect(() => {
     onChangeRef.current();

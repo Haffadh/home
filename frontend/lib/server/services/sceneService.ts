@@ -72,7 +72,7 @@ export async function runScene(
   const results: Record<string, unknown>[] = [];
   let allDeviceIds: string[] = [];
   try {
-    const devices = await deviceService.getDevices(true);
+    const devices = await deviceService.getDevices();
     // Room-scoped scenes only target devices in that room
     if (scene.scope === "room" && scene.room) {
       allDeviceIds = devices
