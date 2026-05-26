@@ -1,17 +1,11 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for Claude Code (claude.ai/code) when working with this repository.
 
 ## Development Commands
 
-### Backend (Fastify, Node.js ES modules)
-```bash
-cd backend
-npm install
-npm start              # Runs node server.js on port 3001
-```
+Single Next.js 16 app inside `frontend/`. No backend directory — API routes live in `frontend/app/api/*`.
 
-### Frontend (Next.js 16 + React 19)
 ```bash
 cd frontend
 npm install
@@ -20,65 +14,56 @@ npm run build          # Production build
 npm run lint           # ESLint
 ```
 
-### Database (PostgreSQL)
-```bash
-psql -d smarthub -f backend/migrations/001_daily_tasks.sql
-psql -d smarthub -f backend/migrations/002_auth.sql
-psql -d smarthub -f backend/migrations/003_activity_log.sql
-```
-
-Both frontend and backend must be running for full functionality. The backend dev-token (`Authorization: Bearer dev-token`) maps to `{ id: "dev", role: "admin" }` for local testing.
+**Dev auth token:** `Authorization: Bearer dev-token` maps to `{ id: "dev", role: "admin" }` for local testing via `authenticateRequest` in `frontend/lib/server/middleware.ts`.
 
 ## Architecture
 
-**Monorepo** with two independent apps — no shared workspace tooling.
+**Single Next.js 16 app** deployed to Vercel. All backend concerns (auth, data, AI) run as Next.js API routes backed by Supabase.
 
-### Backend
-- **Fastify 5** server (`backend/server.js`) — single file registers all routes inline plus route files from `routes/`.
-- **PostgreSQL** via `pg` client — schema in `backend/schema.sql`, migrations in `backend/migrations/`.
-- **Custom JWT auth** (`backend/lib/auth.js`) — scrypt password hashing, 15-min access tokens, 7-day refresh tokens with rotation. Middleware in `backend/middleware/auth.js` provides `requireAuth` and `requireRole()`.
-- **WebSocket** at `/ws` — broadcasts real-time events (`tasks_updated`, `urgent_updated`, `groceries_updated`, etc.) to all connected clients.
-- **Home Assistant integration** (`backend/services/hassClient.js`) — controls smart home devices via HA REST API (`GET /api/states`, `POST /api/services/{domain}/{service}`). Auth via long-lived access token.
-- **Services** in `backend/services/` — `deviceService` (HA entity→device mapping), `sceneService`, `sceneScheduler`, `mealAIService`, `deviceHealthScheduler`.
+### API layer (`frontend/app/api/*`)
+- **Auth:** `/api/auth/{login,logout,me,refresh,register,role-login}` — custom JWT (scrypt password hashing, 15-min access, 7-day refresh with rotation). Middleware in `frontend/lib/server/middleware.ts` provides `authenticateRequest` + `requireRole`.
+- **Data routes:** `/api/{tasks,urgent_tasks,groceries,inventory,meals,scenes,devices,activity,notifications,weather,users,music,today}` — all read/write via Supabase.
+- **AI:** `/api/ai/howto` (step-by-step task guidance), `/api/meals/suggestions` (context-aware meal AI), `/api/inventory/audit-photo` (vision-based pantry scan). Powered by **Claude Haiku 4.5** via `@anthropic-ai/sdk`. Client code in `frontend/lib/server/services/anthropicClient.ts` and `frontend/lib/server/services/mealAIService.ts`.
+- **Home Assistant (optional):** `/api/devices/*`, `/api/integrations/hass/status`. Disabled until `HASS_URL` + `HASS_TOKEN` are set.
+
+### Database: Supabase
+- Project: `zloifhakskeyvehlrhqh` (hardcoded in `.env.local`).
+- Server-side access via `frontend/lib/server/db.ts` — uses `SUPABASE_SERVICE_ROLE_KEY` to bypass RLS; falls back to anon key if service role not set.
+- Tables: `scheduled_tasks`, `urgent_tasks`, `daily_tasks` + `daily_task_instances`, `meals`, `groceries`, `inventory`, `scenes`, `activity_log`, `notifications`, `users`, `refresh_tokens`.
 
 ### Frontend
-- **Next.js 16 App Router** with Tailwind CSS 4, Framer Motion, dnd-kit for drag-and-drop.
+- **Next.js 16 App Router** with Tailwind CSS 4, Framer Motion 12, dnd-kit for drag-and-drop.
 - **Zustand store** (`frontend/stores/houseBrain.ts`) — client-side state with localStorage persistence for tasks, meals, groceries, inventory, scenes.
-- **API client** (`frontend/lib/api.ts`) — wraps fetch calls to `NEXT_PUBLIC_API_BASE` (default `http://127.0.0.1:3001`) with JWT auth header.
-- **Path alias:** `@/*` maps to project root in tsconfig.
+- **API client** (`frontend/lib/api.ts`) — wraps fetch calls to `NEXT_PUBLIC_API_BASE` (empty = same-origin) with Bearer token from localStorage (`smarthub_token`) or Supabase session.
+- **Path alias:** `@/*` maps to `frontend/` root in tsconfig.
+- **Motion tokens:** `frontend/lib/motion.ts` — shared variants/transitions for page entry, stagger, card reveal, modals. `frontend/app/template.tsx` applies a subtle entry fade to every routed page.
 
-### Real-time Strategy
-- Primary: WebSocket connection managed by `RealtimeContext` — dispatches browser custom events on `window`.
-- Fallback: 30-second polling when WebSocket disconnects.
-- Optional: Supabase Realtime via `GlobalRealtimeContext` (if Supabase env vars are set).
+### Real-time
+- Primary: **Supabase Realtime** via `GlobalRealtimeContext` — listens on `postgres_changes` for tasks/meals/groceries/scenes/inventory.
+- Fallback: polling via `RealtimeContext` dispatches `window` custom events every 8s.
 
-### Auth Flow
-- Login page (`/login`) uses role selection; admin panel requires triple-tap and passcode "3866".
-- JWT token stored in localStorage as `smarthub_token`.
-- `AuthContext` verifies token on load via `GET /auth/me`, provides `user`, `token`, `role`, `login()`, `logout()`.
+### Auth & panels
+- Login at `/login` — family member list (Moeen, Samya, Nawaf, Ahmed, Mariam, Abdullah) + Kitchen option + triple-tap title → admin passcode `3866`.
+- Passwords: `{Name}#1` for each role (e.g., `Moeen#1`, `Kitchen#1`).
+- Token in localStorage as `smarthub_token` / `token`. Supabase session also consulted.
+- **Panels:** `/panel/house` (family dashboard — simplified), `/panel/kitchen` (full dashboard), `/panel/admin` (full + admin controls). Room panels removed; rooms remain as task-assignment metadata in `frontend/lib/rooms.ts`.
 
-### Roles & Permissions
-Roles: `house`, `kitchen`, `abdullah`, `winklevi_room`, `mariam_room`, `master_bedroom`, `dining_room`, `living_room`, `admin`.
-
-Two permission systems in `frontend/lib/`:
-- `permissions.ts` — granular permissions (`viewTasks`, `createTasks`, `controlDevices`, etc.) checked via `canPermission(role, perm)`.
-- `roles.ts` — legacy sidebar/dashboard permissions checked via `can(role, perm)`.
-
-`kitchen` and `admin` have full access; room roles are view-only; `house` can delegate tasks and choose meals.
-
-### Key Data Model (PostgreSQL)
-- `users`, `refresh_tokens` — auth
-- `tasks` (scheduled), `urgent_tasks` (ad-hoc), `daily_tasks` + `daily_task_instances` — task system with time windows (morning/afternoon/evening)
-- `groceries` — shopping list
-- `activity_log` — audit trail
-
-### Page Structure
-- `/panel/{role}` — role-specific dashboards (house, kitchen, abdullah, room panels, admin)
-- `/devices`, `/groceries`, `/family`, `/scenes`, `/todays-tasks`, `/notifications` — feature pages
-- `DashboardShell` wraps all authenticated pages with navigation, scene triggers, and real-time providers.
+### Roles & permissions
+Roles: `moeen`, `samya`, `nawaf`, `ahmed`, `mariam`, `abdullah`, `kitchen`, `admin`.
+- `admin` + `kitchen` → `/panel/kitchen` (full MainDashboard).
+- Family + `abdullah` → `/panel/house` (FamilyDashboard).
+- Permission layers: `frontend/lib/permissions.ts` (granular keys like `viewTasks`, `controlDevices`) and legacy sidebar perms via `can(role, perm)`.
 
 ## Environment Variables
 
-Backend `.env`: `HASS_URL` (e.g. `http://homeassistant.local:8123`), `HASS_TOKEN` (long-lived access token), `HASS_DEVICE_ROOMS` (optional, `entity_id:room,...`), `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `DB_PORT`, `JWT_SECRET`, `PORT`, `OPENAI_API_KEY`.
+**Frontend `.env.local` / Vercel env:**
+- `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` — Supabase client.
+- `SUPABASE_SERVICE_ROLE_KEY` — server-side writes (bypasses RLS). Recommended.
+- `JWT_SECRET` — custom JWT signing for role-login.
+- `NEXT_PUBLIC_API_BASE` — empty string for same-origin (default).
+- `ANTHROPIC_API_KEY` — Claude Haiku 4.5 for AI features. Features no-op if missing.
+- `HASS_URL`, `HASS_TOKEN`, `HASS_DEVICE_ROOMS` — Home Assistant (optional, phased in later).
 
-Frontend `.env.local`: `NEXT_PUBLIC_API_BASE`, `NEXT_PUBLIC_SUPABASE_URL` (optional), `NEXT_PUBLIC_SUPABASE_ANON_KEY` (optional).
+## Deployment
+
+Vercel project `smart-home-hub` (frontend/.vercel/project.json). `npm run build` passes; `npx vercel --prod` from `frontend/` deploys.

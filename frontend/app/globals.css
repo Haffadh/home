@@ -54,6 +54,14 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Respect iPhone safe areas (notch / Dynamic Island / home indicator) */
+@supports (padding: max(0px)) {
+  body {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+}
+
 /* Only Home/Dashboard: lock scroll (applied via JS when pathname === "/") */
 html.home-no-scroll,
 html.home-no-scroll body {
