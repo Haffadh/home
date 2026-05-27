@@ -106,20 +106,49 @@ export default function AbdullahPage() {
     void load();
   }, [load]);
 
-  async function markComplete(id: number) {
-    const res = await authFetch(`/daily-tasks/${id}/complete`, {
-      method: "POST",
-      body: JSON.stringify({ date }),
-    });
-    if (res.ok) void load();
+  async function setInstanceStatus(id: number, action: "complete" | "skip") {
+    const nextStatus: TaskInstance["status"] = action === "complete" ? "done" : "skipped";
+    let previousInstance: TaskInstance | null | undefined;
+    setTasks((current) =>
+      current.map((t) => {
+        if (t.id !== id) return t;
+        previousInstance = t.instance ?? null;
+        return {
+          ...t,
+          instance: {
+            ...(t.instance ?? {}),
+            status: nextStatus,
+            completed_at: action === "complete" ? new Date().toISOString() : null,
+          },
+        };
+      })
+    );
+
+    try {
+      const res = await authFetch(`/daily-tasks/${id}/${action}`, {
+        method: "POST",
+        body: JSON.stringify({ date }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `Failed to ${action}`);
+      }
+    } catch (err) {
+      setTasks((current) =>
+        current.map((t) =>
+          t.id === id ? { ...t, instance: previousInstance ?? null } : t
+        )
+      );
+      setError(err instanceof Error ? err.message : "Request failed");
+    }
   }
 
-  async function markSkipped(id: number) {
-    const res = await authFetch(`/daily-tasks/${id}/skip`, {
-      method: "POST",
-      body: JSON.stringify({ date }),
-    });
-    if (res.ok) void load();
+  function markComplete(id: number) {
+    void setInstanceStatus(id, "complete");
+  }
+
+  function markSkipped(id: number) {
+    void setInstanceStatus(id, "skip");
   }
 
   function logout() {

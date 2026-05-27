@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type User = { id: number; name: string; role: string };
@@ -39,7 +39,9 @@ export default function AdminPage() {
     lunch: "",
     dinner: "",
   });
-  const [menuSaving, setMenuSaving] = useState<string | null>(null);
+  const [menuSaving, setMenuSaving] = useState(false);
+  const [menuSavedAt, setMenuSavedAt] = useState<number | null>(null);
+  const [menuError, setMenuError] = useState<string | null>(null);
 
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
@@ -78,7 +80,7 @@ export default function AdminPage() {
       const data = await res.json();
       const list: User[] = Array.isArray(data) ? data : [];
       setUsers(list);
-      const abdullah = list.find((u) => u.role === "abdullah") || list[0];
+      const abdullah = list.find((u) => u.role === "abdullah");
       if (abdullah && staffId === null) setStaffId(abdullah.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load users");
@@ -131,16 +133,36 @@ export default function AdminPage() {
     void loadMenu();
   }, [loadMenu]);
 
-  async function saveMenuSlot(mealType: "breakfast" | "lunch" | "dinner", name: string) {
-    if (!name.trim()) return;
-    setMenuSaving(mealType);
+  async function saveMenu() {
+    setMenuSaving(true);
+    setMenuError(null);
+    const date = todayISO();
+    const slots: ("breakfast" | "lunch" | "dinner")[] = ["breakfast", "lunch", "dinner"];
     try {
-      await authFetch("/meals", {
-        method: "POST",
-        body: JSON.stringify({ date: todayISO(), meal_type: mealType, name: name.trim() }),
-      });
+      const results = await Promise.all(
+        slots
+          .filter((slot) => menu[slot].trim() !== "")
+          .map((slot) =>
+            authFetch("/meals", {
+              method: "POST",
+              body: JSON.stringify({ date, meal_type: slot, name: menu[slot].trim() }),
+            })
+          )
+      );
+      const failed = results.find((r) => !r.ok);
+      if (failed) {
+        const data = await failed.json().catch(() => ({}));
+        setMenuError(data.error || "Save failed");
+        return;
+      }
+      setMenuSavedAt(Date.now());
+      setTimeout(() => {
+        setMenuSavedAt((t) => (t && Date.now() - t >= 2000 ? null : t));
+      }, 2000);
+    } catch (err) {
+      setMenuError(err instanceof Error ? err.message : "Save failed");
     } finally {
-      setMenuSaving(null);
+      setMenuSaving(false);
     }
   }
 
@@ -189,11 +211,6 @@ export default function AdminPage() {
     router.replace("/login");
   }
 
-  const staffOptions = useMemo(
-    () => users.filter((u) => u.role !== "admin"),
-    [users]
-  );
-
   return (
     <div className="min-h-screen px-4 py-6 max-w-3xl mx-auto">
       <header className="flex items-center justify-between mb-6">
@@ -212,30 +229,24 @@ export default function AdminPage() {
               <input
                 value={menu[slot]}
                 onChange={(e) => setMenu((m) => ({ ...m, [slot]: e.target.value }))}
-                onBlur={(e) => saveMenuSlot(slot, e.target.value)}
                 placeholder={`What's for ${slot}?`}
                 className="flex-1 rounded-lg bg-slate-800 border border-white/10 px-3 py-2 text-white outline-none focus:border-blue-400"
               />
-              {menuSaving === slot && <span className="text-xs text-white/40">saving…</span>}
             </div>
           ))}
         </div>
-      </section>
-
-      <section className="mb-6">
-        <label className="block text-xs uppercase tracking-wide text-white/40 mb-2">Staff</label>
-        <select
-          value={staffId ?? ""}
-          onChange={(e) => setStaffId(parseInt(e.target.value, 10))}
-          className="w-full rounded-lg bg-slate-800 border border-white/10 px-3 py-2 text-white outline-none"
-        >
-          {staffOptions.length === 0 && <option value="">No staff users found</option>}
-          {staffOptions.map((u) => (
-            <option key={u.id} value={u.id}>
-              {u.name} ({u.role}) · #{u.id}
-            </option>
-          ))}
-        </select>
+        <div className="mt-3 flex items-center gap-3">
+          <button
+            type="button"
+            onClick={saveMenu}
+            disabled={menuSaving}
+            className="rounded-lg bg-blue-500 hover:bg-blue-400 disabled:opacity-50 px-4 py-2 text-sm font-medium text-white transition"
+          >
+            {menuSaving ? "Saving…" : "Save Menu"}
+          </button>
+          {menuSavedAt && <span className="text-sm text-emerald-400">Saved ✓</span>}
+          {menuError && <span className="text-sm text-rose-400">{menuError}</span>}
+        </div>
       </section>
 
       <form
