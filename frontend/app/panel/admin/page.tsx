@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { DISHES } from "@/lib/dishes";
+import { DISH_GROUPS } from "@/lib/dishes";
 
 type User = { id: number; name: string; role: string };
 type Meal = { id: number; date: string; meal_type: "breakfast" | "lunch" | "dinner"; name: string };
@@ -243,10 +243,14 @@ export default function AdminPage() {
                 className="rounded-lg bg-slate-800 border border-white/10 px-2 py-2 text-sm text-white outline-none focus:border-blue-400 max-w-[12rem]"
               >
                 <option value="">Pick a dish…</option>
-                {DISHES.map((dish) => (
-                  <option key={dish} value={dish}>
-                    {dish}
-                  </option>
+                {DISH_GROUPS.map((group) => (
+                  <optgroup key={group.category} label={group.category}>
+                    {group.dishes.map((dish) => (
+                      <option key={dish} value={dish}>
+                        {dish}
+                      </option>
+                    ))}
+                  </optgroup>
                 ))}
               </select>
             </div>
