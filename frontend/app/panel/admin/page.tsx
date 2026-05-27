@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { DISHES } from "@/lib/dishes";
 
 type User = { id: number; name: string; role: string };
 type Meal = { id: number; date: string; meal_type: "breakfast" | "lunch" | "dinner"; name: string };
@@ -232,6 +233,22 @@ export default function AdminPage() {
                 placeholder={`What's for ${slot}?`}
                 className="flex-1 rounded-lg bg-slate-800 border border-white/10 px-3 py-2 text-white outline-none focus:border-blue-400"
               />
+              <select
+                value=""
+                onChange={(e) => {
+                  const dish = e.target.value;
+                  if (!dish) return;
+                  setMenu((m) => ({ ...m, [slot]: dish }));
+                }}
+                className="rounded-lg bg-slate-800 border border-white/10 px-2 py-2 text-sm text-white outline-none focus:border-blue-400 max-w-[12rem]"
+              >
+                <option value="">Pick a dish…</option>
+                {DISHES.map((dish) => (
+                  <option key={dish} value={dish}>
+                    {dish}
+                  </option>
+                ))}
+              </select>
             </div>
           ))}
         </div>
