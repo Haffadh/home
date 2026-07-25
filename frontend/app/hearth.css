@@ -1,0 +1,148 @@
+/* ──────────────────────────────────────────────────────────────────────────
+   HEARTH — design tokens for the Smart Home Hub.
+
+   PHASE 0 IS ADDITIVE ONLY. Nothing here alters an existing rule. All new
+   utilities live under fresh names (hearth-*, h1..h9, r-*, e-*) so the current
+   /panel/abdullah and /panel/admin pages render byte-identically to before.
+   The global flip (dropping the dark body gradient + the html font-size hack)
+   happens in the Phase 1 commit, alongside the page rewrite that needs it.
+
+   Sizes are px, not rem, on purpose: globals.css sets `html { font-size: 21px }`
+   with a breakpoint cascade, so a rem scale would silently render 1.31x larger
+   on iPad than on phone. Px keeps the scale honest across all three surfaces.
+   ────────────────────────────────────────────────────────────────────────── */
+
+@theme {
+  /* ── Colour ──────────────────────────────────────────────────────────────
+     Warm neutral ramp + exactly one accent (ember). Every foreground value
+     below is verified >= 4.5:1 against every surface it is allowed on.       */
+
+  --color-hearth-canvas: #f6f4f1; /* page background */
+  --color-hearth-surface: #ffffff; /* cards, raised panels */
+  --color-hearth-sunk: #efebe6; /* inset wells, empty states */
+
+  --color-hearth-line: #e2dcd4; /* hairlines, dividers */
+  --color-hearth-line-strong: #cfc7bc; /* input borders, focus-adjacent */
+
+  --color-hearth-ink: #1f1b17; /* primary text          15.6:1 on canvas */
+  --color-hearth-ink-2: #57504a; /* secondary text         7.2:1 on canvas */
+  --color-hearth-ink-3: #6e655e; /* meta / timestamps      5.2:1 on canvas */
+
+  --color-hearth-accent: #b4471b; /* ember — the single accent  5.0:1 on canvas */
+  --color-hearth-accent-soft: #fbede5; /* accent tint background */
+
+  --color-hearth-done: #4a6b2a; /* completed — olive          6.1:1 on surface */
+  --color-hearth-done-soft: #edf1e4;
+
+  /* ── Type scale ──────────────────────────────────────────────────────────
+     Calibrated so h1/h2 stay legible at 2 m on a wall-mounted iPad, and h6/h7
+     stay >= 16px so mobile Safari never zooms a form field.                  */
+
+  --text-h1: 128px; /* dashboard clock only */
+  --text-h2: 72px; /* dashboard section numerals */
+  --text-h3: 40px; /* page title */
+  --text-h4: 28px; /* section heading */
+  --text-h5: 22px; /* card heading, task title */
+  --text-h6: 19px; /* lead body */
+  --text-h7: 17px; /* body */
+  --text-h8: 15px; /* label */
+  --text-h9: 13px; /* micro / meta */
+
+  /* ── Spacing (4px base) ────────────────────────────────────────────────── */
+
+  --spacing-h1: 4px;
+  --spacing-h2: 8px;
+  --spacing-h3: 12px;
+  --spacing-h4: 16px;
+  --spacing-h5: 20px;
+  --spacing-h6: 24px;
+  --spacing-h8: 32px;
+  --spacing-h10: 40px;
+  --spacing-h12: 48px;
+  --spacing-h16: 64px;
+  --spacing-h20: 80px;
+  --spacing-h24: 96px;
+
+  /* ── Radii — one system: soft. Interactive pills are the documented
+     exception (buttons + badges), everything else is 12/16/22.               */
+
+  --radius-h-sm: 8px;
+  --radius-h-md: 12px;
+  --radius-h-lg: 16px;
+  --radius-h-xl: 22px;
+  --radius-h-pill: 999px;
+
+  /* ── Elevation — tinted to the warm neutral, never pure black ──────────── */
+
+  --shadow-h-e1: 0 1px 2px rgba(31, 27, 23, 0.05);
+  --shadow-h-e2:
+    0 2px 8px rgba(31, 27, 23, 0.06), 0 1px 2px rgba(31, 27, 23, 0.04);
+  --shadow-h-e3: 0 12px 32px rgba(31, 27, 23, 0.1);
+
+  /* ── Motion — felt, not seen ───────────────────────────────────────────── */
+
+  --ease-h-out: cubic-bezier(0.16, 1, 0.3, 1); /* entrances, settles */
+  --ease-h-in-out: cubic-bezier(0.65, 0, 0.35, 1); /* moves between two states */
+}
+
+/* Durations are consumed by Framer Motion via lib/design/tokens.ts, and are
+   exposed here for CSS transitions on the base components. */
+:root {
+  --dur-h-quick: 140ms; /* tap feedback, hover */
+  --dur-h-base: 220ms; /* enter / exit */
+  --dur-h-slow: 380ms; /* list reflow after a task completes */
+  --dur-h-ambient: 800ms; /* dashboard data crossfade */
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Scoped theme. Opting a subtree in with `theme-hearth` is what makes Phase 0
+   additive: it overrides the inherited dark body colour locally instead of
+   editing the global rule.
+   ────────────────────────────────────────────────────────────────────────── */
+
+.theme-hearth {
+  background: var(--color-hearth-canvas);
+  color: var(--color-hearth-ink);
+  font-family: var(--font-figtree), ui-sans-serif, system-ui, sans-serif;
+  font-size: 17px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  font-synthesis-weight: none;
+}
+
+/* The page shell paints the canvas edge-to-edge over the inherited dark body. */
+.theme-hearth-root {
+  min-height: 100dvh;
+  background: var(--color-hearth-canvas);
+}
+
+/* Lining tabular numerals: the dashboard clock and every progress count must
+   not reflow as digits tick over. */
+.h-tnum {
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum" 1, "lnum" 1;
+}
+
+/* Focus ring — one definition, used by every interactive base component. */
+.theme-hearth :focus-visible {
+  outline: 2px solid var(--color-hearth-accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-h-sm);
+}
+
+/* Touch targets on the staff panel must clear 48px even when the label is one
+   short word. */
+.h-touch {
+  min-height: 48px;
+  min-width: 48px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-hearth *,
+  .theme-hearth *::before,
+  .theme-hearth *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./hearth.css";
 
 :root {
   --background: #0A0A12;

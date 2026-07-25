@@ -15,6 +15,7 @@
     "@dnd-kit/sortable": "^8.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@fastify/cors": "^11.2.0",
+    "@phosphor-icons/react": "^2.1.10",
     "@supabase/supabase-js": "^2.98.0",
     "framer-motion": "^12.27.0",
     "jspdf": "^4.2.0",
