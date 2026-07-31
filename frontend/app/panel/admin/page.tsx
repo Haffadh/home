@@ -1,8 +1,23 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { AnimatePresence, motion } from "framer-motion";
+import { Check, Plus, Trash } from "@phosphor-icons/react";
 import { DISH_GROUPS } from "@/lib/dishes";
+import {
+  Badge,
+  Button,
+  Card,
+  CardLabel,
+  Input,
+  PageShell,
+  Section,
+  Select,
+  Textarea,
+} from "@/app/components/ui";
+import { DUR, EASE } from "@/lib/design/tokens";
+import { useInstantMotion } from "@/lib/design/motion";
 
 type User = { id: number; name: string; role: string };
 type Meal = { id: number; date: string; meal_type: "breakfast" | "lunch" | "dinner"; name: string };
@@ -23,13 +38,22 @@ type DailyTask = {
 
 const RECURRENCE_OPTIONS = ["daily", "weekly", "none"];
 
+const MEAL_SLOTS = ["breakfast", "lunch", "dinner"] as const;
+
+const SLOT_LABEL: Record<(typeof MEAL_SLOTS)[number], string> = {
+  breakfast: "Breakfast",
+  lunch: "Lunch",
+  dinner: "Dinner",
+};
+
 function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
 export default function AdminPage() {
   const router = useRouter();
-  const [users, setUsers] = useState<User[]>([]);
+  const reduceMotion = useInstantMotion();
+  const [, setUsers] = useState<User[]>([]);
   const [staffId, setStaffId] = useState<number | null>(null);
   const [tasks, setTasks] = useState<DailyTask[]>([]);
   const [loading, setLoading] = useState(true);
@@ -50,6 +74,10 @@ export default function AdminPage() {
   const [windowEnd, setWindowEnd] = useState("12:00");
   const [recurrence, setRecurrence] = useState("daily");
   const [creating, setCreating] = useState(false);
+  /* Synchronous re-entry guards — see the panels: state-driven disabling
+     leaves a same-frame double-fire window; refs close it. */
+  const savingRef = useRef(false);
+  const creatingRef = useRef(false);
 
   const authFetch = useCallback(
     async (path: string, init?: RequestInit) => {
@@ -135,6 +163,8 @@ export default function AdminPage() {
   }, [loadMenu]);
 
   async function saveMenu() {
+    if (savingRef.current) return;
+    savingRef.current = true;
     setMenuSaving(true);
     setMenuError(null);
     const date = todayISO();
@@ -163,13 +193,15 @@ export default function AdminPage() {
     } catch (err) {
       setMenuError(err instanceof Error ? err.message : "Save failed");
     } finally {
+      savingRef.current = false;
       setMenuSaving(false);
     }
   }
 
   async function createTask(e: React.FormEvent) {
     e.preventDefault();
-    if (!title.trim() || staffId === null) return;
+    if (!title.trim() || staffId === null || creatingRef.current) return;
+    creatingRef.current = true;
     setCreating(true);
     try {
       const res = await authFetch("/daily-tasks", {
@@ -192,6 +224,7 @@ export default function AdminPage() {
       setNotes("");
       void loadTasks();
     } finally {
+      creatingRef.current = false;
       setCreating(false);
     }
   }
@@ -213,34 +246,40 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="min-h-screen px-4 py-6 max-w-3xl mx-auto">
-      <header className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold">Admin · Tasks</h1>
-        <button onClick={logout} className="text-xs text-white/40 hover:text-white/80 transition">
+    <PageShell
+      title="Admin"
+      subtitle="Tasks and today's menu"
+      width="wide"
+      action={
+        <Button variant="quiet" size="sm" onClick={logout}>
           Sign out
-        </button>
-      </header>
-
-      <section className="mb-6 bg-slate-900/60 border border-white/5 rounded-2xl p-4">
-        <h2 className="text-base font-medium mb-3">Today's Menu</h2>
-        <div className="space-y-2">
-          {(["breakfast", "lunch", "dinner"] as const).map((slot) => (
-            <div key={slot} className="flex items-center gap-3">
-              <label className="w-24 text-sm text-white/60 capitalize">{slot}</label>
-              <input
+        </Button>
+      }
+    >
+      {/* ── Today's menu ──────────────────────────────────────────────────── */}
+      <Card className="mb-h8">
+        <CardLabel>Today&apos;s menu</CardLabel>
+        <div className="mt-h4 flex flex-col gap-h4">
+          {MEAL_SLOTS.map((slot) => (
+            <div
+              key={slot}
+              className="grid items-end gap-h3 md:grid-cols-[1fr_16rem]"
+            >
+              <Input
+                label={SLOT_LABEL[slot]}
                 value={menu[slot]}
                 onChange={(e) => setMenu((m) => ({ ...m, [slot]: e.target.value }))}
                 placeholder={`What's for ${slot}?`}
-                className="flex-1 rounded-lg bg-slate-800 border border-white/10 px-3 py-2 text-white outline-none focus:border-blue-400"
               />
-              <select
+              <Select
+                label={`Pick a dish for ${slot}`}
+                hideLabel
                 value=""
                 onChange={(e) => {
                   const dish = e.target.value;
                   if (!dish) return;
                   setMenu((m) => ({ ...m, [slot]: dish }));
                 }}
-                className="rounded-lg bg-slate-800 border border-white/10 px-2 py-2 text-sm text-white outline-none focus:border-blue-400 max-w-[12rem]"
               >
                 <option value="">Pick a dish…</option>
                 {DISH_GROUPS.map((group) => (
@@ -252,113 +291,154 @@ export default function AdminPage() {
                     ))}
                   </optgroup>
                 ))}
-              </select>
+              </Select>
             </div>
           ))}
         </div>
-        <div className="mt-3 flex items-center gap-3">
-          <button
-            type="button"
-            onClick={saveMenu}
-            disabled={menuSaving}
-            className="rounded-lg bg-blue-500 hover:bg-blue-400 disabled:opacity-50 px-4 py-2 text-sm font-medium text-white transition"
-          >
-            {menuSaving ? "Saving…" : "Save Menu"}
-          </button>
-          {menuSavedAt && <span className="text-sm text-emerald-400">Saved ✓</span>}
-          {menuError && <span className="text-sm text-rose-400">{menuError}</span>}
+        <div className="mt-h5 flex items-center gap-h4">
+          <Button type="button" onClick={saveMenu} loading={menuSaving}>
+            Save menu
+          </Button>
+          <AnimatePresence initial={false}>
+            {menuSavedAt && (
+              <motion.span
+                key="saved"
+                initial={reduceMotion ? false : { opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{
+                  opacity: 0,
+                  transition: { duration: reduceMotion ? 0 : DUR.fast },
+                }}
+                transition={
+                  reduceMotion
+                    ? { duration: 0 }
+                    : { duration: DUR.fast, ease: EASE.out }
+                }
+              >
+                <Badge tone="done" icon={<Check size={14} weight="bold" />}>
+                  Saved
+                </Badge>
+              </motion.span>
+            )}
+          </AnimatePresence>
+          {menuError && (
+            <p className="text-h8 font-medium text-hearth-accent">{menuError}</p>
+          )}
         </div>
-      </section>
+      </Card>
 
-      <form
-        onSubmit={createTask}
-        className="space-y-3 bg-slate-900/60 border border-white/5 rounded-2xl p-4 mb-6"
-      >
-        <h2 className="text-base font-medium">New task</h2>
-        <input
-          required
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="Title (e.g. Take out the trash)"
-          className="w-full rounded-lg bg-slate-800 border border-white/10 px-3 py-2 text-white"
-        />
-        <textarea
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          placeholder="Notes (optional)"
-          rows={2}
-          className="w-full rounded-lg bg-slate-800 border border-white/10 px-3 py-2 text-white"
-        />
-        <div className="grid grid-cols-3 gap-3">
-          <div>
-            <label className="block text-xs text-white/40 mb-1">Start</label>
-            <input
+      {/* ── New task ──────────────────────────────────────────────────────── */}
+      <Card className="mb-h8">
+        <CardLabel>New task</CardLabel>
+        <form onSubmit={createTask} className="mt-h4 flex flex-col gap-h4">
+          <Input
+            label="Title"
+            required
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="e.g. Take out the trash"
+          />
+          <Textarea
+            label="Notes (optional)"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={2}
+          />
+          <div className="grid gap-h4 md:grid-cols-3">
+            <Input
+              label="Start"
               type="time"
               value={windowStart}
               onChange={(e) => setWindowStart(e.target.value)}
-              className="w-full rounded-lg bg-slate-800 border border-white/10 px-2 py-2 text-white"
             />
-          </div>
-          <div>
-            <label className="block text-xs text-white/40 mb-1">End</label>
-            <input
+            <Input
+              label="End"
               type="time"
               value={windowEnd}
               onChange={(e) => setWindowEnd(e.target.value)}
-              className="w-full rounded-lg bg-slate-800 border border-white/10 px-2 py-2 text-white"
             />
-          </div>
-          <div>
-            <label className="block text-xs text-white/40 mb-1">Repeats</label>
-            <select
+            <Select
+              label="Repeats"
               value={recurrence}
               onChange={(e) => setRecurrence(e.target.value)}
-              className="w-full rounded-lg bg-slate-800 border border-white/10 px-2 py-2 text-white"
             >
               {RECURRENCE_OPTIONS.map((r) => (
                 <option key={r} value={r}>
                   {r}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
-        </div>
-        <button
-          type="submit"
-          disabled={creating || staffId === null}
-          className="rounded-lg bg-blue-500 hover:bg-blue-400 disabled:opacity-50 px-4 py-2 text-sm font-medium text-white"
-        >
-          {creating ? "Creating…" : "Add task"}
-        </button>
-      </form>
-
-      <section>
-        <h2 className="text-base font-medium mb-3">Today's tasks</h2>
-        {loading && <p className="text-white/50">Loading…</p>}
-        {error && <p className="text-rose-400 text-sm mb-3">{error}</p>}
-        {!loading && tasks.length === 0 && <p className="text-white/50 text-sm">No tasks.</p>}
-        <ul className="space-y-2">
-          {tasks.map((t) => (
-            <li
-              key={t.id}
-              className="rounded-xl bg-slate-900/60 border border-white/10 px-4 py-3 flex items-center justify-between gap-3"
+          <div>
+            <Button
+              type="submit"
+              loading={creating}
+              disabled={creating || staffId === null}
+              icon={<Plus size={18} weight="bold" />}
             >
-              <div className="min-w-0 flex-1">
-                <p className="font-medium truncate">{t.title}</p>
-                <p className="text-xs text-white/40">
-                  {t.window_start}–{t.window_end} · {t.recurrence}
-                </p>
-              </div>
-              <button
-                onClick={() => deleteTask(t.id)}
-                className="text-xs text-rose-400/80 hover:text-rose-300 transition"
-              >
-                Delete
-              </button>
-            </li>
-          ))}
-        </ul>
-      </section>
-    </div>
+              Add task
+            </Button>
+          </div>
+        </form>
+      </Card>
+
+      {/* ── Today's tasks ─────────────────────────────────────────────────── */}
+      <Section heading="Today's tasks">
+        {loading && <p className="text-h7 text-hearth-ink-3">Loading…</p>}
+        {error && (
+          <Card tone="accent" elevation="flat" className="mb-h4">
+            <p className="text-h7 font-medium text-hearth-accent">{error}</p>
+          </Card>
+        )}
+        {!loading && tasks.length === 0 && (
+          <Card tone="sunk" elevation="flat">
+            <p className="py-h4 text-center text-h7 text-hearth-ink-3">
+              No tasks.
+            </p>
+          </Card>
+        )}
+        {!loading && tasks.length > 0 && (
+          <ul className="flex flex-col gap-h2">
+            <AnimatePresence initial={false} mode="popLayout">
+              {tasks.map((t) => (
+                <motion.li
+                  key={t.id}
+                  layout
+                  initial={false}
+                  exit={
+                    reduceMotion
+                      ? { opacity: 0 }
+                      : { opacity: 0, y: 6 }
+                  }
+                  transition={
+                    reduceMotion
+                      ? { duration: 0 }
+                      : { duration: DUR.base, ease: EASE.inOut }
+                  }
+                  className="flex items-center justify-between gap-h4 rounded-h-md bg-hearth-surface px-h5 py-h4 shadow-h-e1"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-h7 font-medium text-hearth-ink">
+                      {t.title}
+                    </p>
+                    <p className="h-tnum text-h9 text-hearth-ink-3">
+                      {t.window_start}–{t.window_end} · {t.recurrence}
+                    </p>
+                  </div>
+                  <Button
+                    variant="quiet"
+                    size="sm"
+                    onClick={() => void deleteTask(t.id)}
+                    icon={<Trash size={16} />}
+                  >
+                    Delete
+                  </Button>
+                </motion.li>
+              ))}
+            </AnimatePresence>
+          </ul>
+        )}
+      </Section>
+    </PageShell>
   );
 }

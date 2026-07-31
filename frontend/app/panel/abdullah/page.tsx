@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { Check, SkipForward, Sun } from "@phosphor-icons/react";
 import { Badge, Button, Card, PageShell } from "@/app/components/ui";
 import {
@@ -14,6 +14,7 @@ import {
   type Menu,
 } from "@/app/components/MenuCard";
 import { DUR, EASE } from "@/lib/design/tokens";
+import { useInstantMotion } from "@/lib/design/motion";
 
 /* ── Types mirror the API exactly. The contract is unchanged from before the
    redesign: same endpoints, same payloads, same localStorage keys. ───────── */
@@ -66,7 +67,9 @@ function clockOf(iso?: string | null): string | null {
 
 export default function AbdullahPage() {
   const router = useRouter();
-  const reduceMotion = useReducedMotion();
+  /* One flag gates every animation: reduced-motion preference, or a hidden
+     page whose halted rAF would freeze exits mid-flight (the Phase 3 lesson). */
+  const reduceMotion = useInstantMotion();
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [requests, setRequests] = useState<FamilyRequest[]>([]);
@@ -78,6 +81,11 @@ export default function AbdullahPage() {
   const [staffName, setStaffName] = useState<string>("");
   const [busyId, setBusyId] = useState<number | null>(null);
   const [mounted, setMounted] = useState(false);
+  /* Synchronous re-entry guards. The disabled prop flips only after a React
+     commit, which leaves a same-frame window where a second tap still fires —
+     a ref closes it. One save per task, one per request, at a time. */
+  const inFlightTasks = useRef<Set<number>>(new Set());
+  const inFlightRequests = useRef<Set<number>>(new Set());
 
   const [date] = useState(todayISO);
 
@@ -172,6 +180,9 @@ export default function AbdullahPage() {
   /* Optimistic update with rollback — unchanged in behaviour from the previous
      version, only the surrounding UI is new. The tap must feel instant. */
   async function setInstanceStatus(id: number, action: "complete" | "skip") {
+    if (inFlightTasks.current.has(id)) return;
+    inFlightTasks.current.add(id);
+
     const nextStatus: TaskInstance["status"] =
       action === "complete" ? "done" : "skipped";
     let previousInstance: TaskInstance | null | undefined;
@@ -212,6 +223,7 @@ export default function AbdullahPage() {
       );
       setError(err instanceof Error ? err.message : "Could not save.");
     } finally {
+      inFlightTasks.current.delete(id);
       setBusyId(null);
     }
   }
@@ -219,6 +231,9 @@ export default function AbdullahPage() {
   /* Same optimistic contract as the task buttons: the card leaves instantly,
      and is put back in its place if the save fails. */
   async function markRequestDone(id: number) {
+    if (inFlightRequests.current.has(id)) return;
+    inFlightRequests.current.add(id);
+
     let removed: FamilyRequest | undefined;
     let removedAt = 0;
 
@@ -248,6 +263,7 @@ export default function AbdullahPage() {
       });
       setError(err instanceof Error ? err.message : "Could not save.");
     } finally {
+      inFlightRequests.current.delete(id);
       setBusyRequestId(null);
     }
   }
@@ -289,13 +305,12 @@ export default function AbdullahPage() {
       })
     : "";
 
-  /* Motion is required here by the brief: a finished task must leave the list
-     gracefully rather than blinking out. Framer drives inline styles, so the
-     reduced-motion CSS blanket in hearth.css cannot reach it — this hook is
-     what honours the preference for these animations. */
+  /* The hero moment: a finished task is set down, not deleted. Ambient
+     duration + in-out easing + a small downward drift read as "placed"; the
+     delayed entry in the Finished list below completes the same gesture. */
   const exitTransition = reduceMotion
     ? { duration: 0 }
-    : { duration: DUR.slow, ease: EASE.out };
+    : { duration: DUR.ambient, ease: EASE.inOut };
 
   return (
     <PageShell
@@ -308,6 +323,48 @@ export default function AbdullahPage() {
         </Button>
       }
     >
+      {/* ── Error — outside the crossfade so it can show at any time ──────── */}
+      {error && (
+        <Card tone="accent" elevation="flat" className="mb-h6">
+          <p className="text-h7 font-medium text-hearth-accent">{error}</p>
+        </Card>
+      )}
+
+      {/* ── Skeleton ↔ content is a crossfade, not a pop: popLayout lifts the
+           exiting layer out of flow so both are briefly on screen. The
+           skeleton's heights match the real cards, so nothing jumps. ───────── */}
+      <AnimatePresence initial={false} mode="popLayout">
+        {loading ? (
+          <motion.ul
+            key="skeleton"
+            aria-hidden
+            className="flex w-full flex-col gap-h5"
+            exit={{ opacity: 0 }}
+            transition={
+              reduceMotion
+                ? { duration: 0 }
+                : { duration: DUR.base, ease: EASE.inOut }
+            }
+          >
+            {[0, 1, 2].map((i) => (
+              <li
+                key={i}
+                className="h-[168px] animate-pulse rounded-h-lg border border-hearth-line bg-hearth-surface"
+              />
+            ))}
+          </motion.ul>
+        ) : (
+          <motion.div
+            key="content"
+            className="w-full"
+            initial={reduceMotion ? false : { opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={
+              reduceMotion
+                ? { duration: 0 }
+                : { duration: DUR.base, ease: EASE.inOut }
+            }
+          >
       {/* ── Progress ──────────────────────────────────────────────────────── */}
       {!loading && tasks.length > 0 && (
         <div className="mb-h8">
@@ -339,7 +396,7 @@ export default function AbdullahPage() {
                 width: `${tasks.length ? (doneCount / tasks.length) * 100 : 0}%`,
               }}
               transition={
-                reduceMotion ? { duration: 0 } : { duration: DUR.slow, ease: EASE.out }
+                reduceMotion ? { duration: 0 } : { duration: DUR.base, ease: EASE.out }
               }
             />
           </div>
@@ -367,7 +424,7 @@ export default function AbdullahPage() {
                   exit={
                     reduceMotion
                       ? { opacity: 0, pointerEvents: "none" }
-                      : { opacity: 0, scale: 0.97, pointerEvents: "none" }
+                      : { opacity: 0, y: 6, pointerEvents: "none" }
                   }
                   transition={exitTransition}
                   className="rounded-h-lg border border-hearth-accent/25 bg-hearth-accent-soft p-h5 shadow-h-e1"
@@ -403,25 +460,6 @@ export default function AbdullahPage() {
         </section>
       )}
 
-      {/* ── Error ─────────────────────────────────────────────────────────── */}
-      {error && (
-        <Card tone="accent" elevation="flat" className="mb-h6">
-          <p className="text-h7 font-medium text-hearth-accent">{error}</p>
-        </Card>
-      )}
-
-      {/* ── Loading skeleton — matches the real card shape so nothing jumps ── */}
-      {loading && (
-        <ul className="flex flex-col gap-h5" aria-hidden>
-          {[0, 1, 2].map((i) => (
-            <li
-              key={i}
-              className="h-[168px] animate-pulse rounded-h-lg border border-hearth-line bg-hearth-surface"
-            />
-          ))}
-        </ul>
-      )}
-
       {/* ── To do ─────────────────────────────────────────────────────────── */}
       {!loading && (
         <ul className="flex flex-col gap-h5">
@@ -440,7 +478,7 @@ export default function AbdullahPage() {
                 exit={
                   reduceMotion
                     ? { opacity: 0, pointerEvents: "none" }
-                    : { opacity: 0, scale: 0.97, pointerEvents: "none" }
+                    : { opacity: 0, y: 6, pointerEvents: "none" }
                 }
                 transition={exitTransition}
                 className="rounded-h-lg border border-hearth-line bg-hearth-surface p-h5 shadow-h-e1"
@@ -533,7 +571,7 @@ export default function AbdullahPage() {
                     transition={
                       reduceMotion
                         ? { duration: 0 }
-                        : { duration: DUR.base, ease: EASE.out, delay: 0.12 }
+                        : { duration: DUR.base, ease: EASE.out, delay: 0.2 }
                     }
                     className="flex items-center gap-h4 rounded-h-md bg-hearth-surface px-h5 py-h4"
                   >
@@ -574,6 +612,9 @@ export default function AbdullahPage() {
           </ul>
         </section>
       )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </PageShell>
   );
 }

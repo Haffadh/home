@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { Check } from "@phosphor-icons/react";
 import {
   MEAL_ICON,
@@ -16,6 +16,7 @@ import {
   type MealType,
 } from "@/app/components/MenuCard";
 import { DUR, EASE } from "@/lib/design/tokens";
+import { useInstantMotion } from "@/lib/design/motion";
 
 /* ── Shape of /dashboard/summary, verbatim. ──────────────────────────────── */
 
@@ -52,21 +53,6 @@ function hm(t: string): string {
   return t.slice(0, 5);
 }
 
-/* Animations are rAF-driven, and Chrome stops rAF entirely while the window is
-   hidden or occluded — a crossfade started then would freeze mid-flight and
-   stack both values until the next repaint. When the page can't be seen there
-   is nothing to crossfade for, so swaps become instant. */
-function usePageVisible(): boolean {
-  const [visible, setVisible] = useState(true);
-  useEffect(() => {
-    const update = () => setVisible(document.visibilityState === "visible");
-    update();
-    document.addEventListener("visibilitychange", update);
-    return () => document.removeEventListener("visibilitychange", update);
-  }, []);
-  return visible;
-}
-
 /* ── Crossfade primitive ─────────────────────────────────────────────────────
    An invisible copy of the current content holds the box; the visible copies
    are absolutely stacked over it, so old and new genuinely crossfade with zero
@@ -82,9 +68,7 @@ function Fade({
   className?: string;
   block?: boolean;
 }) {
-  const reduceMotion = useReducedMotion();
-  const pageVisible = usePageVisible();
-  const reduce = reduceMotion || !pageVisible;
+  const reduce = useInstantMotion();
   const Outer = block ? "div" : "span";
   return (
     <Outer className={`relative ${block ? "" : "inline-block"} ${className}`}>
@@ -112,10 +96,8 @@ function Fade({
 }
 
 export default function DashboardPage() {
-  const prefersReducedMotion = useReducedMotion();
-  const pageVisible = usePageVisible();
   /* Same rule everywhere: no animation the viewer can't see. */
-  const reduceMotion = prefersReducedMotion || !pageVisible;
+  const reduceMotion = useInstantMotion();
 
   /* ── Pairing: read ?token= once, keep it in localStorage, clean the URL ── */
   const [token, setToken] = useState<string | null>(null);
@@ -404,7 +386,15 @@ export default function DashboardPage() {
           <motion.span
             initial={reduceMotion ? false : { opacity: 0 }}
             animate={{ opacity: 1 }}
-            exit={{ opacity: 0, transition: { duration: reduceMotion ? 0 : DUR.base } }}
+            exit={{
+              opacity: 0,
+              transition: { duration: reduceMotion ? 0 : DUR.ambient },
+            }}
+            transition={
+              reduceMotion
+                ? { duration: 0 }
+                : { duration: DUR.ambient, ease: EASE.inOut }
+            }
             className="absolute bottom-h5 right-h5 size-[10px] rounded-h-pill bg-hearth-line-strong"
             role="status"
             aria-label="Offline — showing last update"

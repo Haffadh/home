@@ -73,23 +73,25 @@ export const SHADOW = [
   { name: "h-e3", use: "Modal, sheet" },
 ] as const;
 
-/** Motion durations in seconds, the unit Framer Motion expects. */
+/** Motion durations in seconds, the unit Framer Motion expects.
+    Three, not four (Phase 4): every animation is feedback, a transition, or
+    ambient. Anything that can't say which it is doesn't get animated. */
 export const DUR = {
-  quick: 0.14,
-  base: 0.22,
-  slow: 0.38,
-  ambient: 0.8,
+  fast: 0.18, // feedback: taps, hover colour, "Saved" confirmations
+  base: 0.3, // transitions: enter/exit, page-enter, list reflow
+  ambient: 0.5, // ambient: dashboard crossfades, the offline dot
 } as const;
 
-/** Cubic-bezier control points, matching --ease-h-* in hearth.css. */
+/** Cubic-bezier control points, matching --ease-h-* in hearth.css.
+    One family: `out` for things arriving or settling, `inOut` for things
+    moving between two resting states. */
 export const EASE = {
   out: [0.16, 1, 0.3, 1],
   inOut: [0.65, 0, 0.35, 1],
 } as const;
 
 export const MOTION_DOC = [
-  { name: "quick", ms: 140, use: "Tap feedback, hover colour" },
-  { name: "base", ms: 220, use: "Element enter and exit" },
-  { name: "slow", ms: 380, use: "List reflow after a task completes" },
-  { name: "ambient", ms: 800, use: "Dashboard data crossfade" },
+  { name: "fast", ms: 180, use: "Feedback — taps, hover colour, saved ticks" },
+  { name: "base", ms: 300, use: "Transitions — enter, exit, page-enter, reflow" },
+  { name: "ambient", ms: 500, use: "Ambient — dashboard crossfades, offline dot" },
 ] as const;

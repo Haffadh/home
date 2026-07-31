@@ -19,7 +19,7 @@ export type TextareaProps = React.TextareaHTMLAttributes<HTMLTextAreaElement> &
 const CONTROL =
   "w-full min-h-[48px] rounded-h-sm border bg-hearth-surface px-h4 py-h3 text-h7 " +
   "text-hearth-ink placeholder:text-hearth-ink-3 " +
-  "transition-colors duration-[var(--dur-h-quick)] " +
+  "transition-colors duration-[var(--dur-h-fast)] " +
   "disabled:opacity-50 disabled:cursor-not-allowed";
 
 function Shell({

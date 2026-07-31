@@ -57,7 +57,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         aria-busy={loading || undefined}
         className={[
           "inline-flex items-center justify-center font-medium cursor-pointer select-none",
-          "transition-[background-color,color,filter,transform] duration-[var(--dur-h-quick)] ease-[var(--ease-h-out)]",
+          "transition-[background-color,color,filter,transform] duration-[var(--dur-h-fast)] ease-[var(--ease-h-out)]",
           // Tactile push. Transform only, so it never triggers layout.
           "active:translate-y-[1px]",
           "disabled:opacity-50 disabled:cursor-not-allowed disabled:active:translate-y-0",

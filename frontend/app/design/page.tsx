@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   ArrowCounterClockwise,
   Check,
@@ -23,12 +24,15 @@ import {
 import {
   COLOR,
   CONTRAST,
+  DUR,
+  EASE,
   MOTION_DOC,
   RADIUS,
   SHADOW,
   SPACE,
   TYPE,
 } from "@/lib/design/tokens";
+import { useInstantMotion } from "@/lib/design/motion";
 
 /* ── Style-guide-only helpers. Nothing here ships to a real surface. ─────── */
 
@@ -66,6 +70,87 @@ function Swatch({
         <p className="text-h8 font-medium text-hearth-ink">{name}</p>
         {note && <p className="text-h9 text-hearth-ink-3">{note}</p>}
       </div>
+    </div>
+  );
+}
+
+/** Live motion examples — tap each tile to replay its recipe. */
+function MotionExamples() {
+  const instant = useInstantMotion();
+  const [fastKey, setFastKey] = useState(0);
+  const [baseKey, setBaseKey] = useState(0);
+  const [dishIndex, setDishIndex] = useState(0);
+
+  const DISHES = ["Machboos rubyan", "Lamb ouzi"];
+  const dish = DISHES[dishIndex % 2];
+
+  const tile =
+    "rounded-h-lg border border-hearth-line bg-hearth-surface p-h5 text-left shadow-h-e1";
+
+  return (
+    <div className="grid gap-h4 md:grid-cols-3">
+      <button type="button" className={tile} onClick={() => setFastKey((k) => k + 1)}>
+        <p className="text-h8 font-medium text-hearth-ink">fast · feedback</p>
+        <p className="mb-h4 text-h9 text-hearth-ink-3">Tap to replay a saved tick</p>
+        <motion.span
+          key={fastKey}
+          className="inline-block"
+          initial={instant ? false : { opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={
+            instant ? { duration: 0 } : { duration: DUR.fast, ease: EASE.out }
+          }
+        >
+          <Badge tone="done" icon={<Check size={14} weight="bold" />}>
+            Saved
+          </Badge>
+        </motion.span>
+      </button>
+
+      <button type="button" className={tile} onClick={() => setBaseKey((k) => k + 1)}>
+        <p className="text-h8 font-medium text-hearth-ink">base · transition</p>
+        <p className="mb-h4 text-h9 text-hearth-ink-3">Tap to replay an enter</p>
+        <motion.div
+          key={baseKey}
+          className="rounded-h-md bg-hearth-sunk px-h4 py-h3 text-h8 text-hearth-ink"
+          initial={instant ? false : { opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={
+            instant ? { duration: 0 } : { duration: DUR.base, ease: EASE.out }
+          }
+        >
+          A card enters: fade + rise
+        </motion.div>
+      </button>
+
+      <button type="button" className={tile} onClick={() => setDishIndex((d) => d + 1)}>
+        <p className="text-h8 font-medium text-hearth-ink">ambient · crossfade</p>
+        <p className="mb-h4 text-h9 text-hearth-ink-3">Tap to swap the dish</p>
+        <span className="relative inline-block text-h6 font-medium text-hearth-ink">
+          <span aria-hidden className="invisible block">
+            {dish}
+          </span>
+          <AnimatePresence initial={false}>
+            <motion.span
+              key={dish}
+              className="absolute inset-0 block"
+              initial={instant ? { opacity: 1 } : { opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{
+                opacity: 0,
+                transition: { duration: instant ? 0 : DUR.ambient },
+              }}
+              transition={
+                instant
+                  ? { duration: 0 }
+                  : { duration: DUR.ambient, ease: EASE.inOut }
+              }
+            >
+              {dish}
+            </motion.span>
+          </AnimatePresence>
+        </span>
+      </button>
     </div>
   );
 }
@@ -288,11 +373,13 @@ export default function DesignPage() {
       {/* ── Motion ────────────────────────────────────────────────────────── */}
       <Section heading="Motion">
         <p className="mb-h5 max-w-[46rem] text-h6 text-hearth-ink-2">
-          Four durations, two easings. Each one has a job. Anything that cannot
-          name its job does not get animated. All of it collapses to static
-          under reduced motion.
+          Three durations, one easing family. Every animation is feedback, a
+          transition, or ambient — anything that cannot name its job does not
+          get animated. All of it collapses to an instant swap under reduced
+          motion, and whenever the page is hidden (a halted rAF would freeze
+          exits mid-flight).
         </p>
-        <Card elevation="flat" className="divide-y divide-hearth-line">
+        <Card elevation="flat" className="mb-h4 divide-y divide-hearth-line">
           {MOTION_DOC.map((m) => (
             <div
               key={m.name}
@@ -308,6 +395,7 @@ export default function DesignPage() {
             </div>
           ))}
         </Card>
+        <MotionExamples />
       </Section>
 
       {/* ── Components ────────────────────────────────────────────────────── */}

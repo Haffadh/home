@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { Check, PaperPlaneTilt } from "@phosphor-icons/react";
 import {
   Badge,
@@ -23,6 +23,7 @@ import {
   type Menu,
 } from "@/app/components/MenuCard";
 import { DUR, EASE } from "@/lib/design/tokens";
+import { useInstantMotion } from "@/lib/design/motion";
 
 /* ── Types mirror /api/requests exactly. ─────────────────────────────────── */
 
@@ -51,7 +52,8 @@ function whenLabel(iso: string): string {
 
 export default function FamilyPage() {
   const router = useRouter();
-  const reduceMotion = useReducedMotion();
+  /* Reduced-motion preference OR hidden page — either way, instant swaps. */
+  const reduceMotion = useInstantMotion();
 
   const [menu, setMenu] = useState<Menu>(EMPTY_MENU);
   const [requests, setRequests] = useState<FamilyRequest[]>([]);
@@ -62,6 +64,9 @@ export default function FamilyPage() {
   const [title, setTitle] = useState("");
   const [note, setNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  /* Synchronous re-entry guard — the state flag flips only after a commit,
+     which leaves a same-frame window where a double-tap submits twice. */
+  const sendingRef = useRef(false);
 
   const [date] = useState(todayISO);
 
@@ -129,7 +134,8 @@ export default function FamilyPage() {
     e.preventDefault();
     const t = title.trim();
     const n = note.trim();
-    if (!t || submitting) return;
+    if (!t || sendingRef.current) return;
+    sendingRef.current = true;
 
     const tempId = -Date.now();
     const optimistic: FamilyRequest = {
@@ -165,6 +171,7 @@ export default function FamilyPage() {
       setNote(n);
       setError(err instanceof Error ? err.message : "Could not send.");
     } finally {
+      sendingRef.current = false;
       setSubmitting(false);
     }
   }
@@ -200,7 +207,19 @@ export default function FamilyPage() {
       }
     >
       {/* ── Menu ──────────────────────────────────────────────────────────── */}
-      {!loading && hasAnyMeal(menu) && <MenuCard menu={menu} className="mb-h8" />}
+      {!loading && hasAnyMeal(menu) && (
+        <motion.div
+          initial={reduceMotion ? false : { opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={
+            reduceMotion
+              ? { duration: 0 }
+              : { duration: DUR.base, ease: EASE.inOut }
+          }
+        >
+          <MenuCard menu={menu} className="mb-h8" />
+        </motion.div>
+      )}
 
       {/* ── Ask Abdullah ──────────────────────────────────────────────────── */}
       <Card className="mb-h8">
@@ -243,82 +262,161 @@ export default function FamilyPage() {
 
       {/* ── Your requests ─────────────────────────────────────────────────── */}
       <Section heading="Your requests">
-        {loading && (
-          <ul className="flex flex-col gap-h3" aria-hidden>
-            {[0, 1].map((i) => (
-              <li
-                key={i}
-                className="h-[76px] animate-pulse rounded-h-lg border border-hearth-line bg-hearth-surface"
-              />
-            ))}
-          </ul>
-        )}
-
-        {!loading && requests.length === 0 && (
-          <Card tone="sunk" elevation="flat">
-            <div className="flex flex-col items-center gap-h2 py-h8 text-center">
-              <p className="text-h6 font-medium text-hearth-ink">
-                Nothing requested yet
-              </p>
-              <p className="text-h8 text-hearth-ink-3">
-                Whatever you send appears on Abdullah&apos;s screen right away.
-              </p>
-            </div>
-          </Card>
-        )}
-
-        {!loading && requests.length > 0 && (
-          <ul className="flex flex-col gap-h3">
-            <AnimatePresence initial={false}>
-              {requests.map((req) => {
-                const pending = req.status === "pending";
-                return (
-                  <motion.li
-                    key={req.id}
-                    layout
-                    initial={reduceMotion ? false : { opacity: 0, y: -8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={enterTransition}
-                  >
-                    {pending ? (
-                      <Card tone="accent" elevation="flat" as="div">
-                        <div className="flex items-start justify-between gap-h4">
-                          <p className="text-h6 font-semibold text-hearth-ink">
-                            {req.title}
-                          </p>
-                          <Badge tone="accent">Waiting</Badge>
-                        </div>
-                        {req.note && (
-                          <p className="mt-h2 whitespace-pre-wrap text-h8 text-hearth-ink-2">
-                            {req.note}
-                          </p>
-                        )}
-                        <p className="h-tnum mt-h2 text-h9 text-hearth-ink-3">
-                          {mounted ? whenLabel(req.created_at) : ""}
-                        </p>
-                      </Card>
-                    ) : (
-                      <div className="flex items-center gap-h4 rounded-h-md bg-hearth-surface px-h5 py-h4">
-                        <Check
-                          size={20}
-                          weight="bold"
-                          aria-hidden
-                          className="shrink-0 text-hearth-done"
-                        />
-                        <span className="min-w-0 flex-1 truncate text-h7 text-hearth-ink-2">
-                          {req.title}
-                        </span>
-                        <span className="h-tnum shrink-0 text-h9 text-hearth-ink-3">
-                          {mounted ? whenLabel(req.created_at) : ""}
-                        </span>
-                      </div>
-                    )}
-                  </motion.li>
-                );
-              })}
-            </AnimatePresence>
-          </ul>
-        )}
+        <AnimatePresence initial={false} mode="popLayout">
+          {loading ? (
+            <motion.ul
+              key="skeleton"
+              aria-hidden
+              className="flex w-full flex-col gap-h3"
+              exit={{ opacity: 0 }}
+              transition={
+                reduceMotion
+                  ? { duration: 0 }
+                  : { duration: DUR.base, ease: EASE.inOut }
+              }
+            >
+              {[0, 1].map((i) => (
+                <li
+                  key={i}
+                  className="h-[76px] animate-pulse rounded-h-lg border border-hearth-line bg-hearth-surface"
+                />
+              ))}
+            </motion.ul>
+          ) : (
+            <motion.div
+              key="content"
+              className="w-full"
+              initial={reduceMotion ? false : { opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={
+                reduceMotion
+                  ? { duration: 0 }
+                  : { duration: DUR.base, ease: EASE.inOut }
+              }
+            >
+              {requests.length === 0 ? (
+                <Card tone="sunk" elevation="flat">
+                  <div className="flex flex-col items-center gap-h2 py-h8 text-center">
+                    <p className="text-h6 font-medium text-hearth-ink">
+                      Nothing requested yet
+                    </p>
+                    <p className="text-h8 text-hearth-ink-3">
+                      Whatever you send appears on Abdullah&apos;s screen right
+                      away.
+                    </p>
+                  </div>
+                </Card>
+              ) : (
+                <ul className="flex flex-col gap-h3">
+                  <AnimatePresence initial={false}>
+                    {requests.map((req) => {
+                      const pending = req.status === "pending";
+                      return (
+                        /* The optimistic card enters from above — from the
+                           form it was just submitted with. The pending → done
+                           flip is the same element restyling in place: colours
+                           and badge transition, nothing remounts. */
+                        <motion.li
+                          key={req.id}
+                          layout
+                          initial={
+                            reduceMotion ? false : { opacity: 0, y: -12 }
+                          }
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={enterTransition}
+                          className={[
+                            "rounded-h-lg border p-h5",
+                            "transition-[background-color,border-color] duration-[var(--dur-h-base)]",
+                            pending
+                              ? "border-hearth-accent/25 bg-hearth-accent-soft"
+                              : "border-transparent bg-hearth-surface",
+                          ].join(" ")}
+                        >
+                          <div className="flex items-start justify-between gap-h4">
+                            <div className="flex min-w-0 items-center gap-h3">
+                              <AnimatePresence initial={false}>
+                                {!pending && (
+                                  <motion.span
+                                    key="check"
+                                    className="shrink-0"
+                                    initial={
+                                      reduceMotion ? false : { opacity: 0 }
+                                    }
+                                    animate={{ opacity: 1 }}
+                                    transition={
+                                      reduceMotion
+                                        ? { duration: 0 }
+                                        : { duration: DUR.fast, ease: EASE.out }
+                                    }
+                                  >
+                                    <Check
+                                      size={20}
+                                      weight="bold"
+                                      aria-hidden
+                                      className="text-hearth-done"
+                                    />
+                                  </motion.span>
+                                )}
+                              </AnimatePresence>
+                              <p
+                                className={`min-w-0 truncate text-h6 font-semibold transition-colors duration-[var(--dur-h-base)] ${
+                                  pending
+                                    ? "text-hearth-ink"
+                                    : "text-hearth-ink-2"
+                                }`}
+                              >
+                                {req.title}
+                              </p>
+                            </div>
+                            <div className="flex shrink-0 items-center gap-h3">
+                              <AnimatePresence initial={false}>
+                                {pending && (
+                                  <motion.span
+                                    key="waiting"
+                                    exit={{
+                                      opacity: 0,
+                                      transition: {
+                                        duration: reduceMotion ? 0 : DUR.fast,
+                                      },
+                                    }}
+                                  >
+                                    <Badge tone="accent">Waiting</Badge>
+                                  </motion.span>
+                                )}
+                              </AnimatePresence>
+                              <span className="h-tnum text-h9 text-hearth-ink-3">
+                                {mounted ? whenLabel(req.created_at) : ""}
+                              </span>
+                            </div>
+                          </div>
+                          <AnimatePresence initial={false}>
+                            {pending && req.note && (
+                              <motion.p
+                                key="note"
+                                className="mt-h2 overflow-hidden whitespace-pre-wrap text-h8 text-hearth-ink-2"
+                                exit={{
+                                  opacity: 0,
+                                  height: 0,
+                                  marginTop: 0,
+                                  transition: {
+                                    duration: reduceMotion ? 0 : DUR.base,
+                                    ease: EASE.inOut,
+                                  },
+                                }}
+                              >
+                                {req.note}
+                              </motion.p>
+                            )}
+                          </AnimatePresence>
+                        </motion.li>
+                      );
+                    })}
+                  </AnimatePresence>
+                </ul>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </Section>
     </PageShell>
   );

@@ -86,12 +86,12 @@
 }
 
 /* Durations are consumed by Framer Motion via lib/design/tokens.ts, and are
-   exposed here for CSS transitions on the base components. */
+   exposed here for CSS transitions on the base components. Three since
+   Phase 4: feedback, transition, ambient. */
 :root {
-  --dur-h-quick: 140ms; /* tap feedback, hover */
-  --dur-h-base: 220ms; /* enter / exit */
-  --dur-h-slow: 380ms; /* list reflow after a task completes */
-  --dur-h-ambient: 800ms; /* dashboard data crossfade */
+  --dur-h-fast: 180ms; /* feedback: taps, hover, saved ticks */
+  --dur-h-base: 300ms; /* transitions: enter / exit, reflow */
+  --dur-h-ambient: 500ms; /* ambient: dashboard crossfades */
 }
 
 /* ──────────────────────────────────────────────────────────────────────────

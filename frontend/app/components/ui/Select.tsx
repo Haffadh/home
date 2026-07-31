@@ -42,7 +42,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
           className={[
             "w-full min-h-[48px] appearance-none rounded-h-sm border bg-hearth-surface",
             "pl-h4 pr-h10 py-h3 text-h7 text-hearth-ink cursor-pointer",
-            "transition-colors duration-[var(--dur-h-quick)]",
+            "transition-colors duration-[var(--dur-h-fast)]",
             "disabled:opacity-50 disabled:cursor-not-allowed",
             error ? "border-hearth-accent" : "border-hearth-line-strong",
             className,
