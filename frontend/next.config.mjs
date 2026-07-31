@@ -19,6 +19,8 @@ const nextConfig = {
       { source: "/urgent_tasks/:path*", destination: "/api/urgent_tasks/:path*" },
       { source: "/requests", destination: "/api/requests" },
       { source: "/requests/:path*", destination: "/api/requests/:path*" },
+      // Exact path only: /dashboard itself is the page.
+      { source: "/dashboard/summary", destination: "/api/dashboard/summary" },
       { source: "/meals", destination: "/api/meals" },
       { source: "/meals/:path*", destination: "/api/meals/:path*" },
       { source: "/users", destination: "/api/users" },

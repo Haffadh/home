@@ -17,14 +17,15 @@ export const EMPTY_MENU: Menu = { breakfast: null, lunch: null, dinner: null };
 export const MEAL_ORDER: MealType[] = ["breakfast", "lunch", "dinner"];
 
 /* Icon carries the meaning, the word confirms it — Abdullah is not a native
-   English speaker, so neither is left to do the job alone. */
-const MEAL_ICON: Record<MealType, typeof Coffee> = {
+   English speaker, so neither is left to do the job alone. Exported so the
+   dashboard speaks the same icon language. */
+export const MEAL_ICON: Record<MealType, typeof Coffee> = {
   breakfast: Coffee,
   lunch: ForkKnife,
   dinner: CookingPot,
 };
 
-const MEAL_LABEL: Record<MealType, string> = {
+export const MEAL_LABEL: Record<MealType, string> = {
   breakfast: "Breakfast",
   lunch: "Lunch",
   dinner: "Dinner",
