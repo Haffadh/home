@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { getBaseUrl } from "@/lib/api";
+import { defaultRouteFor } from "@/lib/roles";
 
 type LoginResponse = {
   ok: boolean;
@@ -39,7 +40,7 @@ export default function LoginPage() {
       localStorage.setItem("shh_user_id", String(data.user.id));
       localStorage.setItem("shh_user_name", data.user.name);
       localStorage.setItem("shh_role", data.user.role);
-      router.push(data.user.role === "admin" ? "/panel/admin" : "/panel/abdullah");
+      router.push(defaultRouteFor(data.user.role));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Network error");
     } finally {

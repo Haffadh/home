@@ -12,8 +12,9 @@ import { logActivity } from "@/lib/server/activityLog";
 type RouteParams = { params: Promise<{ id: string }> };
 
 /**
- * PATCH /api/urgent_tasks/[id]/ack
- * Mark an urgent task as seen.
+ * PATCH /api/requests/[id]/done
+ * Abdullah (or admin) marks a family request handled. Family members get 403.
+ * acknowledged is kept in sync so legacy readers of that column stay correct.
  */
 export async function PATCH(request: Request, { params }: RouteParams) {
   const auth = authenticateRequest(request);
@@ -27,22 +28,23 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     const db = getDb();
     const { data, error } = await db
       .from("urgent_tasks")
-      .update({ seen: true })
+      .update({ status: "done", acknowledged: true })
       .eq("id", id)
       .select()
-      .single();
+      .maybeSingle();
 
     if (error) throw error;
+    if (!data) return errorResponse(404, "Request not found");
 
     const actor = getActor(request);
     await logActivity({
       ...actor,
-      action: "seen",
+      action: "request_done",
       entity_type: "urgent_task",
       entity_id: id,
     });
 
-    return NextResponse.json(data);
+    return NextResponse.json({ ok: true, data });
   } catch (err) {
     return errorResponse(500, (err as Error).message);
   }

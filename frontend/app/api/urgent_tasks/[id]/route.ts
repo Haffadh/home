@@ -3,6 +3,7 @@ import { getDb } from "@/lib/server/db";
 import {
   authenticateRequest,
   isAuthError,
+  requireRole,
   parseBody,
   errorResponse,
   getActor,
@@ -18,6 +19,9 @@ type RouteParams = { params: Promise<{ id: string }> };
 export async function GET(request: Request, { params }: RouteParams) {
   const auth = authenticateRequest(request);
   if (isAuthError(auth)) return auth;
+
+  const forbidden = requireRole(auth, "abdullah", "admin");
+  if (forbidden) return forbidden;
 
   try {
     const { id } = await params;
@@ -43,6 +47,9 @@ export async function GET(request: Request, { params }: RouteParams) {
 export async function PATCH(request: Request, { params }: RouteParams) {
   const auth = authenticateRequest(request);
   if (isAuthError(auth)) return auth;
+
+  const forbidden = requireRole(auth, "abdullah", "admin");
+  if (forbidden) return forbidden;
 
   try {
     const { id } = await params;
@@ -88,6 +95,9 @@ export async function PATCH(request: Request, { params }: RouteParams) {
 export async function DELETE(request: Request, { params }: RouteParams) {
   const auth = authenticateRequest(request);
   if (isAuthError(auth)) return auth;
+
+  const forbidden = requireRole(auth, "abdullah", "admin");
+  if (forbidden) return forbidden;
 
   try {
     const { id } = await params;

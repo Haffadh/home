@@ -56,15 +56,20 @@ export const ACTOR_NAME: Record<Role, string> = {
 };
 
 export const ROLE_DEFAULT_ROUTE: Record<Role, string> = {
-  moeen: "/panel/abdullah",
-  samya: "/panel/abdullah",
-  nawaf: "/panel/abdullah",
-  ahmed: "/panel/abdullah",
-  mariam: "/panel/abdullah",
+  moeen: "/panel/family",
+  samya: "/panel/family",
+  nawaf: "/panel/family",
+  ahmed: "/panel/family",
+  mariam: "/panel/family",
   abdullah: "/panel/abdullah",
   kitchen: "/panel/abdullah",
   admin: "/panel/admin",
 };
+
+/** Where a freshly logged-in user lands. Unknown/legacy roles are family. */
+export function defaultRouteFor(role: string): string {
+  return ROLE_DEFAULT_ROUTE[role as Role] ?? "/panel/family";
+}
 
 /** Default room for each user (auto-assigned when creating tasks) */
 export const USER_DEFAULT_ROOM: Record<string, string> = {

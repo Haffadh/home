@@ -3,6 +3,7 @@ import { getDb } from "@/lib/server/db";
 import {
   authenticateRequest,
   isAuthError,
+  requireRole,
   parseBody,
   errorResponse,
   getActor,
@@ -12,10 +13,15 @@ import { logActivity } from "@/lib/server/activityLog";
 /**
  * GET /api/urgent_tasks
  * List all urgent tasks ordered by acknowledged asc, priority desc, id desc.
+ * Abdullah/admin only — this is every family member's requests in one list;
+ * family members read their own via /api/requests/mine.
  */
 export async function GET(request: Request) {
   const auth = authenticateRequest(request);
   if (isAuthError(auth)) return auth;
+
+  const forbidden = requireRole(auth, "abdullah", "admin");
+  if (forbidden) return forbidden;
 
   try {
     const db = getDb();

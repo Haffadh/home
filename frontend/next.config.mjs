@@ -17,6 +17,8 @@ const nextConfig = {
       { source: "/daily-tasks/:path*", destination: "/api/daily-tasks/:path*" },
       { source: "/urgent_tasks", destination: "/api/urgent_tasks" },
       { source: "/urgent_tasks/:path*", destination: "/api/urgent_tasks/:path*" },
+      { source: "/requests", destination: "/api/requests" },
+      { source: "/requests/:path*", destination: "/api/requests/:path*" },
       { source: "/meals", destination: "/api/meals" },
       { source: "/meals/:path*", destination: "/api/meals/:path*" },
       { source: "/users", destination: "/api/users" },

@@ -75,7 +75,11 @@ CREATE TABLE IF NOT EXISTS urgent_tasks (
   submitted_by TEXT,
   seen BOOLEAN DEFAULT false,
   acknowledged BOOLEAN DEFAULT false,
-  created_at TIMESTAMPTZ DEFAULT now()
+  created_at TIMESTAMPTZ DEFAULT now(),
+  -- Phase 2 (0003): family requests reuse this table. submitted_by holds the
+  -- requester's user id as text; status supersedes acknowledged (kept in sync).
+  note TEXT DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'done'))
 );
 CREATE INDEX IF NOT EXISTS idx_urgent_tasks_acknowledged ON urgent_tasks(acknowledged);
 

@@ -3,23 +3,20 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { Check, SkipForward, Sun } from "@phosphor-icons/react";
+import { Badge, Button, Card, PageShell } from "@/app/components/ui";
 import {
-  Check,
-  Coffee,
-  CookingPot,
-  ForkKnife,
-  SkipForward,
-  Sun,
-} from "@phosphor-icons/react";
-import { Badge, Button, Card, CardLabel, PageShell } from "@/app/components/ui";
+  MenuCard,
+  menuFromMeals,
+  hasAnyMeal,
+  EMPTY_MENU,
+  type Meal,
+  type Menu,
+} from "@/app/components/MenuCard";
 import { DUR, EASE } from "@/lib/design/tokens";
 
 /* ── Types mirror the API exactly. The contract is unchanged from before the
    redesign: same endpoints, same payloads, same localStorage keys. ───────── */
-
-type MealType = "breakfast" | "lunch" | "dinner";
-
-type Meal = { id: number; date: string; meal_type: MealType; name: string };
 
 type TaskInstance = {
   status: "pending" | "done" | "skipped";
@@ -37,25 +34,18 @@ type Task = {
   instance?: TaskInstance | null;
 };
 
-type Menu = Record<MealType, string | null>;
-
-const EMPTY_MENU: Menu = { breakfast: null, lunch: null, dinner: null };
-
-const MEAL_ORDER: MealType[] = ["breakfast", "lunch", "dinner"];
-
-/* Icon carries the meaning, the word confirms it — Abdullah is not a native
-   English speaker, so neither is left to do the job alone. */
-const MEAL_ICON: Record<MealType, typeof Coffee> = {
-  breakfast: Coffee,
-  lunch: ForkKnife,
-  dinner: CookingPot,
+/* A family request, straight off urgent_tasks. submitted_by is the requester's
+   user id as text; the name is resolved from /users. */
+type FamilyRequest = {
+  id: number;
+  title: string;
+  note: string | null;
+  status: "pending" | "done";
+  submitted_by: string | null;
+  created_at: string;
 };
 
-const MEAL_LABEL: Record<MealType, string> = {
-  breakfast: "Breakfast",
-  lunch: "Lunch",
-  dinner: "Dinner",
-};
+type UserRow = { id: number | string; name: string; role: string };
 
 function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
@@ -79,6 +69,9 @@ export default function AbdullahPage() {
   const reduceMotion = useReducedMotion();
 
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [requests, setRequests] = useState<FamilyRequest[]>([]);
+  const [requesterNames, setRequesterNames] = useState<Record<string, string>>({});
+  const [busyRequestId, setBusyRequestId] = useState<number | null>(null);
   const [menu, setMenu] = useState<Menu>(EMPTY_MENU);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -128,9 +121,13 @@ export default function AbdullahPage() {
         return;
       }
 
-      const [tasksRes, mealsRes] = await Promise.all([
+      /* Requests and names are best-effort — if either fetch fails, the daily
+         task list still has to render exactly as before. */
+      const [tasksRes, mealsRes, requestsRes, usersRes] = await Promise.all([
         authFetch(`/daily-tasks?staff_user_id=${userId}&date=${date}`),
         authFetch(`/meals?date=${date}`),
+        authFetch("/urgent_tasks").catch(() => null),
+        authFetch("/users").catch(() => null),
       ]);
 
       const tasksData = await tasksRes.json();
@@ -143,11 +140,23 @@ export default function AbdullahPage() {
 
       if (mealsRes.ok) {
         const mealsData = await mealsRes.json();
-        const next: Menu = { ...EMPTY_MENU };
-        for (const m of (mealsData.meals || []) as Meal[]) {
-          if (m.meal_type in next) next[m.meal_type] = m.name;
+        setMenu(menuFromMeals((mealsData.meals || []) as Meal[]));
+      }
+
+      if (requestsRes?.ok) {
+        const rows = (await requestsRes.json()) as FamilyRequest[];
+        setRequests(
+          Array.isArray(rows) ? rows.filter((r) => r.status === "pending") : []
+        );
+      }
+
+      if (usersRes?.ok) {
+        const users = (await usersRes.json()) as UserRow[];
+        const names: Record<string, string> = {};
+        if (Array.isArray(users)) {
+          for (const u of users) names[String(u.id)] = u.name;
         }
-        setMenu(next);
+        setRequesterNames(names);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Network error");
@@ -207,6 +216,49 @@ export default function AbdullahPage() {
     }
   }
 
+  /* Same optimistic contract as the task buttons: the card leaves instantly,
+     and is put back in its place if the save fails. */
+  async function markRequestDone(id: number) {
+    let removed: FamilyRequest | undefined;
+    let removedAt = 0;
+
+    setBusyRequestId(id);
+    setRequests((current) => {
+      const index = current.findIndex((r) => r.id === id);
+      if (index >= 0) {
+        removed = current[index];
+        removedAt = index;
+      }
+      return current.filter((r) => r.id !== id);
+    });
+
+    try {
+      const res = await authFetch(`/requests/${id}/done`, { method: "PATCH" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Could not save. Please try again.");
+      }
+      setError(null);
+    } catch (err) {
+      setRequests((current) => {
+        if (!removed) return current;
+        const next = [...current];
+        next.splice(Math.min(removedAt, next.length), 0, removed);
+        return next;
+      });
+      setError(err instanceof Error ? err.message : "Could not save.");
+    } finally {
+      setBusyRequestId(null);
+    }
+  }
+
+  function requesterLabel(req: FamilyRequest): string {
+    if (req.submitted_by && requesterNames[req.submitted_by]) {
+      return requesterNames[req.submitted_by];
+    }
+    return "Family";
+  }
+
   function logout() {
     ["smarthub_token", "token", "shh_user_id", "shh_user_name", "shh_role"].forEach(
       (k) => localStorage.removeItem(k)
@@ -227,7 +279,7 @@ export default function AbdullahPage() {
     [tasks]
   );
 
-  const hasMenu = MEAL_ORDER.some((slot) => menu[slot]);
+  const hasMenu = hasAnyMeal(menu);
 
   const prettyDate = mounted
     ? new Date(`${date}T00:00:00`).toLocaleDateString("en-GB", {
@@ -295,32 +347,60 @@ export default function AbdullahPage() {
       )}
 
       {/* ── Menu ──────────────────────────────────────────────────────────── */}
-      {!loading && hasMenu && (
-        <Card className="mb-h8">
-          <CardLabel>Food today</CardLabel>
-          <ul className="mt-h4 flex flex-col gap-h4">
-            {MEAL_ORDER.map((slot) => {
-              const name = menu[slot];
-              if (!name) return null;
-              const Icon = MEAL_ICON[slot];
-              return (
-                <li key={slot} className="flex items-start gap-h4">
-                  <Icon
-                    size={24}
-                    aria-hidden
-                    className="mt-[2px] shrink-0 text-hearth-ink-3"
-                  />
-                  <div className="min-w-0">
-                    <p className="text-h9 text-hearth-ink-3">
-                      {MEAL_LABEL[slot]}
-                    </p>
-                    <p className="text-h5 font-medium text-hearth-ink">{name}</p>
+      {!loading && hasMenu && <MenuCard menu={menu} className="mb-h8" />}
+
+      {/* ── From the family — pending requests, above the daily tasks. The
+           accent surface is the "needs a person" signal; when there are none,
+           the group does not exist at all. ─────────────────────────────────── */}
+      {!loading && requests.length > 0 && (
+        <section className="mb-h8" aria-label="From the family">
+          <h2 className="mb-h4 text-h8 font-medium text-hearth-ink-3">
+            From the family
+          </h2>
+          <ul className="flex flex-col gap-h5">
+            <AnimatePresence initial={false} mode="popLayout">
+              {requests.map((req) => (
+                <motion.li
+                  key={req.id}
+                  layout
+                  initial={false}
+                  exit={
+                    reduceMotion
+                      ? { opacity: 0, pointerEvents: "none" }
+                      : { opacity: 0, scale: 0.97, pointerEvents: "none" }
+                  }
+                  transition={exitTransition}
+                  className="rounded-h-lg border border-hearth-accent/25 bg-hearth-accent-soft p-h5 shadow-h-e1"
+                >
+                  <div className="flex items-start justify-between gap-h4">
+                    <h3 className="text-h5 font-semibold text-hearth-ink">
+                      {req.title}
+                    </h3>
+                    <Badge tone="accent">{requesterLabel(req)}</Badge>
                   </div>
-                </li>
-              );
-            })}
+
+                  {req.note && (
+                    <p className="mt-h3 whitespace-pre-wrap text-h7 text-hearth-ink-2">
+                      {req.note}
+                    </p>
+                  )}
+
+                  <div className="mt-h5">
+                    <Button
+                      size="lg"
+                      fullWidth
+                      loading={busyRequestId === req.id}
+                      onClick={() => void markRequestDone(req.id)}
+                      icon={<Check size={22} weight="bold" />}
+                    >
+                      Done
+                    </Button>
+                  </div>
+                </motion.li>
+              ))}
+            </AnimatePresence>
           </ul>
-        </Card>
+        </section>
       )}
 
       {/* ── Error ─────────────────────────────────────────────────────────── */}
