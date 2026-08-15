@@ -154,3 +154,4 @@ backend/smart-home.db
 # not live. See docs/HANDOFF.md §3.
 CREDENTIALS.local.md
 *.local.md
+.env*

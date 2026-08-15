@@ -14,8 +14,9 @@ verification audit. Written 2026-08-15.
 
 A single Next.js 16 app (`frontend/`, App Router, React 19, Tailwind 4,
 Framer Motion 12) backed by Supabase Postgres. No separate backend — the API
-is Next.js route handlers. Production is Vercel (project `home`), but nothing
-newer than 2026-05-27 has been deployed — see §9.
+is Next.js route handlers. **Live at https://home-psi-pink.vercel.app** —
+Vercel project `home`, personal scope `nawaf-haffadhs-projects`, auto-deployed
+from `main` on `github.com/Haffadh/home`.
 
 Its job: Abdullah (household staff) sees today's tasks on a tablet and marks
 them done or skipped; the family sets the menu, creates tasks, and sends him
@@ -96,7 +97,8 @@ service "Supabase CLI" (base64 after a `go-keyring-base64:` prefix), and
 
 ## 5. Pairing the wall iPad
 
-Open `/dashboard?token=<DASHBOARD_TOKEN>` **once** on the iPad; the token is
+Open `https://home-psi-pink.vercel.app/dashboard?token=<DASHBOARD_TOKEN>`
+**once** on the iPad; the token is
 then stored locally and the bare `/dashboard` URL works. The summary endpoint
 accepts only the `X-Dashboard-Token` header (timing-safe compare) and rejects
 JWTs outright — verified in §7.
@@ -167,6 +169,7 @@ client actually fetches the rewritten bare path `/requests`, so one real row
 | Abdullah's panel after the auth change | logs in, loads, completes a task; guard and exit animation intact |
 | All seven accounts | log in and land on the correct panel; a brand-new account driven in the browser reaches `/panel/family` |
 | Password rotation | all seven rotated to passphrases and re-verified logging in; all four sampled old passwords rejected |
+| **Production, post-deploy** | all seven log in on the live URL and land correctly; old passwords rejected; `role-login` 404, `dev-token` 401, `register` 401; Abdullah's tasks and the wall dashboard both return real data; the four surfaces render in a browser |
 | Login → each of the four surfaces | all render on Hearth |
 | Page-enter present, normal motion | 300ms fade+rise on every route |
 | Page-enter under `prefers-reduced-motion` | **0** painted frames of motion on all 5 routes (was ~19 frames / ~350ms — fixed this pass) |
@@ -206,21 +209,29 @@ simply not animate on first mount. Everything triggered by a user action or a
 data change is safe on Framer, because `useInstantMotion()` has long settled by
 then.
 
-## 9. Blockers before the family can use this
+## 9. Deployment
 
-One thing still stands between this and the family using it.
+**Live: https://home-psi-pink.vercel.app** (Vercel project `home`). Pushing to
+`main` auto-deploys. Verified end-to-end against production 2026-08-15: all
+seven accounts log in and reach the right panel, Abdullah's tasks load, the
+wall dashboard summary returns data, and all three auth bypasses are closed.
 
-**1. None of this is deployed.** `origin/main` on `github.com/Haffadh/home` is
-at `0dc66ba`, last pushed 2026-05-27, and the last production deployment
-recorded on GitHub was that same commit. Every commit from the dish dropdown onward —
-including all five Hearth phases and the motion fix — exists only on this
-machine. **Whatever the family opens today is the pre-Hearth May app.** Nine
-commits are unpushed. Production is the Vercel project `home` (confirmed by
-Nawaf 2026-08-15); GitHub's older deployment records mention Railway, which
-appears to be a superseded host.
+Getting there turned up three traps worth knowing:
 
-**2. ~~Only 3 of 7 family accounts exist.~~ Done 2026-08-15.** All seven now
-exist and were verified logging in and landing on the right panel — see §3.
+- **Vercel env vars are baked in at build time** for anything `NEXT_PUBLIC_*`,
+  and injected at deploy time for the rest. Adding or changing a variable does
+  nothing to the running deployment — it needs a redeploy
+  (`npx vercel redeploy <deployment-url>`, which keeps the Git provenance).
+  A deployment that builds fine but fails every login with
+  `TypeError: fetch failed` is this: the server has no reachable Supabase URL.
+- **Railway is a dead integration.** It is still connected to the repo and
+  fires on every push, but it has never once succeeded — it failed in May and
+  failed again on the 2026-08-15 push, both times within ~9 seconds. Worth
+  disconnecting so it stops posting failed deployments to GitHub.
+- **`frontend/.vercel/project.json` points at the wrong project** — the stale
+  `smart-home-hub` project, under a team that is no longer accessible. That is
+  why `vercel` commands run from `frontend/` fail with "Could not retrieve
+  Project Settings". The repo root is linked correctly to `home`.
 
 ## 9a. Security — fixed 2026-08-15
 
