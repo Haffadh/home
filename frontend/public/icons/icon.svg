@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Haffadh Home">
+  <!-- Hearth's ember (#b4471b) carries the mark; the house is drawn in canvas
+       (#f6f4f1) so the icon reads as one warm block at home-screen size. -->
+  <rect width="512" height="512" fill="#b4471b"/>
+  <g fill="none" stroke="#f6f4f1" stroke-width="34" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M120 274 L256 148 L392 274"/>
+    <path d="M156 262 V386 H356 V262"/>
+  </g>
+  <path d="M222 386 v-44 a34 34 0 0 1 68 0 v44 z" fill="#f6f4f1"/>
+</svg>

@@ -283,7 +283,7 @@ export default function DashboardPage() {
   const stale = !!data && degraded;
 
   return (
-    <div className="theme-hearth theme-hearth-root relative h-dvh overflow-hidden select-none">
+    <div className="theme-hearth theme-hearth-root hearth-safe-area relative h-dvh overflow-hidden select-none">
       <div
         className="h-full w-full"
         style={{
