@@ -38,23 +38,30 @@ Login sends you to your role's default route via `defaultRouteFor()` in
 
 ## 3. Accounts
 
-Password convention is `{Name}#1`. **Only three accounts actually exist:**
+All seven accounts exist and were verified logging in on 2026-08-15. Password
+convention is `{Name}#1`, defined in `lib/roles.ts`.
 
-| Name | Email | Password | Role |
-|---|---|---|---|
-| Abdullah | `abdullah-1779806878@haffadh.local` | `Abdullah#1` | `abdullah` |
-| Admin | `admin-1779809143@haffadh.local` | `Admin#1` | `admin` |
-| Nawaf | `nawaf@haffadh.local` | `Nawaf#1` | `nawaf` |
+| Name | Email | Password | Role | Lands on |
+|---|---|---|---|---|
+| Abdullah | `abdullah-1779806878@haffadh.local` | `Abdullah#1` | `abdullah` | `/panel/abdullah` |
+| Admin | `admin-1779809143@haffadh.local` | `Admin#1` | `admin` | `/panel/admin` |
+| Nawaf | `nawafhaffadh@gmail.com` | `Nawaf#1` | `nawaf` | `/panel/family` |
+| Moeen | `moeenhaffadh@gmail.com` | `Moeen#1` | `moeen` | `/panel/family` |
+| Samya | `drsamyabahram@yahoo.com` | `Samya#1` | `samya` | `/panel/family` |
+| Ahmed | `ahaffadh@gmail.com` | `Ahmed#1` | `ahmed` | `/panel/family` |
+| Mariam | `mhaffadh@gmail.com` | `Mariam#1` | `mariam` | `/panel/family` |
 
-`lib/roles.ts` also defines `moeen`, `samya`, `ahmed`, `mariam` and `kitchen`
-with passwords — but **those users do not exist in the database and cannot log
-in.** Creating them is the main blocker before handing this to the family
-(see §9).
+Nawaf's address changed from `nawaf@haffadh.local` to `nawafhaffadh@gmail.com`
+on 2026-08-15; the old one no longer works. `lib/roles.ts` also defines a
+`kitchen` role (routes to Abdullah's panel) with no account behind it.
+
+New accounts are created through `POST /api/auth/register`, which now requires
+an admin token.
 
 Auth is a custom JWT (scrypt hashing, 30-day access tokens). The browser keeps
 `smarthub_token`, `token`, `shh_user_id`, `shh_user_name`, `shh_role` in
-localStorage. Locally, `Authorization: Bearer dev-token` maps to
-`{id:"dev", role:"admin"}`.
+localStorage. In development only, `Authorization: Bearer dev-token` maps to
+`{id:"dev", role:"admin"}` — it is rejected on a production build.
 
 ## 4. Environment variables
 
@@ -92,7 +99,8 @@ All under `/api/*`; `next.config.mjs` also rewrites the bare paths
 (`/daily-tasks`, `/meals`, `/users`, …) so client code fetches without the
 prefix.
 
-- `auth/{login,logout,me,refresh,register,role-login}`
+- `auth/{login,logout,me,refresh,register}` — `register` is admin-only;
+  `role-login` was deleted 2026-08-15 (it was an auth bypass, see §9a)
 - `daily-tasks`, `daily-tasks/[id]`, `daily-tasks/[id]/{complete,skip}` —
   `GET` needs `?staff_user_id=<int>` or it 400s (by design)
 - `meals`, `meals/[id]`
@@ -146,7 +154,10 @@ client actually fetches the rewritten bare path `/requests`, so one real row
 
 | Check | Result |
 |---|---|
-| Production build + TypeScript | clean, 24 routes |
+| Production build + TypeScript | clean, 23 routes (24 before `role-login` was removed) |
+| Auth bypasses closed | `role-login` 404, `dev-token` 401 on a production build, `register` 401/403/400 |
+| Abdullah's panel after the auth change | logs in, loads, completes a task; guard and exit animation intact |
+| All seven accounts | log in and land on the correct panel; a brand-new account driven in the browser reaches `/panel/family` |
 | Login → each of the four surfaces | all render on Hearth |
 | Page-enter present, normal motion | 300ms fade+rise on every route |
 | Page-enter under `prefers-reduced-motion` | **0** painted frames of motion on all 5 routes (was ~19 frames / ~350ms — fixed this pass) |
@@ -188,7 +199,7 @@ then.
 
 ## 9. Blockers before the family can use this
 
-Two things make the handoff impossible today. Neither is cosmetic.
+One thing still stands between this and the family using it.
 
 **1. None of this is deployed.** `origin/main` on `github.com/Haffadh/home` is
 at `0dc66ba`, last pushed 2026-05-27, and the last production deployment
@@ -199,39 +210,36 @@ commits are unpushed. Production is the Vercel project `home` (confirmed by
 Nawaf 2026-08-15); GitHub's older deployment records mention Railway, which
 appears to be a superseded host.
 
-**2. Only 3 of 7 family accounts exist.** Abdullah, Admin and Nawaf are real.
-Moeen, Samya, Ahmed and Mariam are defined in `lib/roles.ts` with passwords but
-have **no database rows**, so they cannot log in at all. They need creating
-before `/panel/family` means anything to them.
+**2. ~~Only 3 of 7 family accounts exist.~~ Done 2026-08-15.** All seven now
+exist and were verified logging in and landing on the right panel — see §3.
 
-## 9a. Security — read before deploying publicly
+## 9a. Security — fixed 2026-08-15
 
-Fine on a dormant app; not fine on a public URL.
+Three separate ways to become admin without credentials were found while
+auditing before deployment, and all three are fixed (commit `adc76d2`). None
+was ever exploited because nothing has been deployed since May.
 
-- **`POST /api/auth/role-login` is a complete authentication bypass.** It
-  takes a role *string only* — no password, no credentials, no auth header —
-  and returns a valid **30-day JWT** for that role, `admin` included.
-  Verified 2026-08-15: `curl -X POST /api/auth/role-login -d '{"role":"admin"}'`
-  returns a token that is accepted by `/users`, `/urgent_tasks` and
-  `/daily-tasks` (all 200). The login form is decorative as a security
-  boundary; passwords protect nothing while this exists. It cannot simply be
-  deleted — `lib/api.ts` calls it for silent token refresh, so removing it
-  breaks re-authentication on every surface. The real fix is to move that
-  refresh onto the existing `/api/auth/refresh` refresh-token flow and drop
-  `role-login` entirely.
-- **`POST /api/auth/register` is completely unauthenticated and honours an
-  arbitrary `role` in the body.** Anyone who can reach the deployment can
-  create themselves an `admin` account. Verified 2026-08-15 with a deliberately
-  incomplete payload (400 "name is required" — a validation error, never an
-  auth error), so nothing was created. This is the one to fix before the app
-  is reachable from the internet.
+| Was | Now |
+|---|---|
+| `POST /api/auth/role-login` returned a valid 30-day JWT for any role — `admin` included — given only the role *name*. No password, no auth header. The minted token was accepted by `/users`, `/urgent_tasks` and `/daily-tasks`. | Route deleted; returns 404. It was dead code — nothing imports `apiFetch`, and each panel has its own `authFetch`. |
+| `Bearer dev-token` mapped to `{id:"dev", role:"admin"}` unconditionally, production included. | Gated on `NODE_ENV !== "production"`; returns 401 on a production build. |
+| `POST /api/auth/register` was unauthenticated and honoured an arbitrary `role` from the body. | Requires an authenticated admin (401 anonymous, 403 as a family role) and validates the role against the known set (400 otherwise). |
+
+Still open, by choice:
+
 - **Passwords are the published convention `{Name}#1`**, listed in
   `lib/roles.ts`, which is in the repo. Anyone who knows a family member's
-  first name can log in as them.
+  first name can log in as them. Fine for a private household URL; not fine if
+  the deployment is ever shared or indexed.
 - **`POST /urgent_tasks` is unauthenticated**, so request rows can be created
-  by anyone.
-- The `/dashboard` token is the one credential that is properly handled
-  (header-only, timing-safe compare, rejects JWTs).
+  by anyone who can reach the app.
+- The `/dashboard` token is properly handled — header-only, timing-safe
+  compare, rejects JWTs.
+
+There is no client-side silent refresh any more, and none is needed: access
+tokens last 30 days, so a tablet re-authenticates about monthly. If it is ever
+wanted, `/api/auth/refresh` already implements a real rotating refresh-token
+flow — store the `refreshToken` that `/auth/login` returns and call it.
 
 ## 10. Known rough edges
 
