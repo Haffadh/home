@@ -2,20 +2,26 @@ import { NextResponse } from "next/server";
 import {
   authenticateRequest,
   isAuthError,
+  requireRole,
   parseBody,
   errorResponse,
 } from "@/lib/server/middleware";
 import { updateDailyTask } from "@/lib/server/services/dailyTasksDb";
+import { STAFF_PANEL_ROLES } from "@/lib/roles";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
 /**
  * PATCH /api/daily-tasks/[id]
- * Update a daily task.
+ * Update a daily task. Staff + admin only — `is_active: false` here is the
+ * admin panel's soft delete, so it is not a family member's to call.
  */
 export async function PATCH(request: Request, { params }: RouteParams) {
   const auth = authenticateRequest(request);
   if (isAuthError(auth)) return auth;
+
+  const forbidden = requireRole(auth, ...STAFF_PANEL_ROLES);
+  if (forbidden) return forbidden;
 
   try {
     const { id } = await params;

@@ -15,6 +15,8 @@ import {
 } from "@/app/components/MenuCard";
 import { DUR, EASE } from "@/lib/design/tokens";
 import { useInstantMotion } from "@/lib/design/motion";
+import { isRoleDenied, useRoleGuard } from "@/app/components/auth/useRoleGuard";
+import { STAFF_PANEL_ROLES } from "@/lib/roles";
 
 /* ── Types mirror the API exactly. The contract is unchanged from before the
    redesign: same endpoints, same payloads, same localStorage keys. ───────── */
@@ -67,6 +69,11 @@ function clockOf(iso?: string | null): string | null {
 
 export default function AbdullahPage() {
   const router = useRouter();
+  /* Family members land on their own panel instead of this one. Staff and admin
+     are unaffected: the guard returns false without ever setting state, so this
+     page renders and animates exactly as it did before. The real enforcement is
+     requireRole on /daily-tasks — this only picks the friendlier destination. */
+  const denied = useRoleGuard(STAFF_PANEL_ROLES, "/panel/family");
   /* One flag gates every animation: reduced-motion preference, or a hidden
      page whose halted rAF would freeze exits mid-flight (the Phase 3 lesson). */
   const reduceMotion = useInstantMotion();
@@ -174,6 +181,10 @@ export default function AbdullahPage() {
   }, [authFetch, date]);
 
   useEffect(() => {
+    /* Checked synchronously, not off the `denied` flag: every effect in this
+       commit runs before React re-renders with that state, so the flag would
+       arrive too late to stop these fetches. Always false for staff/admin. */
+    if (isRoleDenied(STAFF_PANEL_ROLES)) return;
     void load();
   }, [load]);
 
@@ -311,6 +322,10 @@ export default function AbdullahPage() {
   const exitTransition = reduceMotion
     ? { duration: 0 }
     : { duration: DUR.ambient, ease: EASE.inOut };
+
+  /* After every hook, so hook order is identical on both paths. Nothing is
+     painted on the way to /panel/family — and nothing was fetched either. */
+  if (denied) return null;
 
   return (
     <PageShell

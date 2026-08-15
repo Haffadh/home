@@ -66,6 +66,20 @@ export function defaultRouteFor(role: string): string {
   return ROLE_DEFAULT_ROUTE[role as Role] ?? "/panel/family";
 }
 
+/**
+ * Who may use the staff surface: the staff roles themselves, plus admin so the
+ * household admin can see exactly what Abdullah sees without a second account.
+ *
+ * This is the single source of truth for both halves of the guard — the client
+ * redirect on `/panel/abdullah` and the `requireRole` calls on the
+ * `/daily-tasks` routes behind it. It matches `ROLE_DEFAULT_ROUTE`, which sends
+ * both `abdullah` and `kitchen` to that panel.
+ *
+ * Deliberately NOT reused by `/urgent_tasks` or `/requests/[id]/done`: those are
+ * `abdullah` + `admin` today, and importing this would silently widen them.
+ */
+export const STAFF_PANEL_ROLES = ["abdullah", "kitchen", "admin"] as const;
+
 /** Default room for each user (auto-assigned when creating tasks) */
 export const USER_DEFAULT_ROOM: Record<string, string> = {
   moeen: "Master Bedroom",

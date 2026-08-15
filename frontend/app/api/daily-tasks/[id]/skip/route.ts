@@ -2,20 +2,28 @@ import { NextResponse } from "next/server";
 import {
   authenticateRequest,
   isAuthError,
+  requireRole,
   parseBody,
   errorResponse,
 } from "@/lib/server/middleware";
 import { skipInstance } from "@/lib/server/services/dailyTasksDb";
+import { STAFF_PANEL_ROLES } from "@/lib/roles";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
 /**
  * POST /api/daily-tasks/[id]/skip
  * Mark a daily task instance as skipped for a given date.
+ *
+ * Staff + admin only, same as complete — skipping someone else's day is the
+ * same authority as finishing it.
  */
 export async function POST(request: Request, { params }: RouteParams) {
   const auth = authenticateRequest(request);
   if (isAuthError(auth)) return auth;
+
+  const forbidden = requireRole(auth, ...STAFF_PANEL_ROLES);
+  if (forbidden) return forbidden;
 
   try {
     const { id } = await params;

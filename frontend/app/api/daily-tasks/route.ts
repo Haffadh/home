@@ -2,10 +2,12 @@ import { NextResponse } from "next/server";
 import {
   authenticateRequest,
   isAuthError,
+  requireRole,
   parseBody,
   errorResponse,
   getActor,
 } from "@/lib/server/middleware";
+import { STAFF_PANEL_ROLES } from "@/lib/roles";
 import { logActivity } from "@/lib/server/activityLog";
 import {
   getTasksWithInstances,
@@ -21,10 +23,17 @@ import { getStaffUserId } from "@/lib/server/services/staffUser";
  * resolves the staff user by role, which is what every surface should do.
  * Passing the signed-in user's id is what made the staff panel render an
  * empty list for anyone who was not Abdullah.
+ *
+ * Staff + admin only. Its two readers are the staff panel and the admin task
+ * list; the wall dashboard does not come through here at all — it calls the
+ * same service directly behind its device token.
  */
 export async function GET(request: Request) {
   const auth = authenticateRequest(request);
   if (isAuthError(auth)) return auth;
+
+  const forbidden = requireRole(auth, ...STAFF_PANEL_ROLES);
+  if (forbidden) return forbidden;
 
   try {
     const { searchParams } = new URL(request.url);
@@ -49,11 +58,15 @@ export async function GET(request: Request) {
 
 /**
  * POST /api/daily-tasks
- * Create a new daily task.
+ * Create a new daily task. Staff + admin only — assigning work to the
+ * household staff is the admin panel's job.
  */
 export async function POST(request: Request) {
   const auth = authenticateRequest(request);
   if (isAuthError(auth)) return auth;
+
+  const forbidden = requireRole(auth, ...STAFF_PANEL_ROLES);
+  if (forbidden) return forbidden;
 
   try {
     const body = await parseBody(request);
