@@ -7,17 +7,54 @@ import {
   hashRefreshToken,
   REFRESH_TOKEN_EXPIRY,
 } from "@/lib/server/auth";
-import { parseBody, errorResponse } from "@/lib/server/middleware";
+import {
+  parseBody,
+  errorResponse,
+  authenticateRequest,
+  isAuthError,
+  requireRole,
+} from "@/lib/server/middleware";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/** Mirrors Role in lib/roles.ts. An unrecognised role would create a user who
+    cannot be routed anywhere by defaultRouteFor(). */
+const VALID_ROLES = [
+  "moeen",
+  "samya",
+  "nawaf",
+  "ahmed",
+  "mariam",
+  "abdullah",
+  "kitchen",
+  "admin",
+];
+
+/**
+ * POST /api/auth/register — admin only.
+ *
+ * This was open to the world and honoured whatever `role` the caller put in
+ * the body, so anyone who could reach the deployment could mint themselves an
+ * admin account. Account creation is an admin action; there is no self-signup
+ * in a household app.
+ */
 export async function POST(request: Request) {
+  const auth = authenticateRequest(request);
+  if (isAuthError(auth)) return auth;
+
+  const forbidden = requireRole(auth, "admin");
+  if (forbidden) return forbidden;
+
   try {
     const body = await parseBody(request);
     const name = body.name as string | undefined;
     const email = body.email as string | undefined;
     const password = body.password as string | undefined;
     const role = (body.role as string) || "house";
+
+    if (!VALID_ROLES.includes(role)) {
+      return errorResponse(400, `Invalid role: ${role}`);
+    }
 
     // Validation
     if (!name || typeof name !== "string" || !name.trim()) {

@@ -23,8 +23,9 @@ export function authenticateRequest(request: Request): AuthUser | NextResponse {
 
   const token = authHeader.slice(7).trim();
 
-  // Development fallback
-  if (token === "dev-token") {
+  // Development fallback. MUST stay out of production: unconditionally it is a
+  // one-header admin bypass for anyone who can reach the deployment.
+  if (token === "dev-token" && process.env.NODE_ENV !== "production") {
     return { id: "dev", role: "admin" };
   }
 

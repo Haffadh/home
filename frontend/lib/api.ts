@@ -43,45 +43,17 @@ async function getAccessToken(): Promise<string | null> {
   return localStorage.getItem("token") ?? localStorage.getItem(AUTH_TOKEN_KEY_LEGACY);
 }
 
-/**
- * Silent re-login: calls /auth/role-login with the stored role to get a fresh JWT.
- * Returns the new token or null if refresh fails.
- */
-let refreshInFlight: Promise<string | null> | null = null;
+/* Silent re-login used to live here. It POSTed the stored ROLE to
+   /auth/role-login, which handed back a 30-day JWT for that role with no
+   credentials at all — an authentication bypass rather than a refresh. Both it
+   and the endpoint are gone.
 
-async function refreshToken(): Promise<string | null> {
-  // Deduplicate concurrent refresh calls
-  if (refreshInFlight) return refreshInFlight;
-
-  refreshInFlight = (async () => {
-    try {
-      if (typeof window === "undefined") return null;
-      const role = localStorage.getItem(STORAGE_KEY_ROLE);
-      if (!role) return null;
-
-      const res = await fetch(`${API_BASE}/auth/role-login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role }),
-      });
-      if (!res.ok) return null;
-
-      const data = await res.json();
-      if (data.accessToken) {
-        localStorage.setItem("token", data.accessToken);
-        localStorage.setItem(AUTH_TOKEN_KEY_LEGACY, data.accessToken);
-        return data.accessToken as string;
-      }
-      return null;
-    } catch {
-      return null;
-    } finally {
-      refreshInFlight = null;
-    }
-  })();
-
-  return refreshInFlight;
-}
+   Nothing replaced it because nothing needed it: the panels each define their
+   own authFetch that redirects to /login on 401, and access tokens last 30
+   days, so a household tablet re-authenticates about once a month. If silent
+   refresh is ever wanted, /api/auth/refresh already implements the real
+   rotating refresh-token flow — store the refreshToken that /auth/login
+   returns and call that. */
 
 /**
  * Shared fetch for backend API. Automatically adds:
@@ -99,18 +71,7 @@ export async function apiFetch(path: string, options: RequestInit = {}): Promise
       : {}),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
-  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
-
-  // Auto-refresh on 401 — retry once with a fresh token
-  if (res.status === 401 && !path.includes("/auth/")) {
-    const newToken = await refreshToken();
-    if (newToken) {
-      headers.Authorization = `Bearer ${newToken}`;
-      return fetch(`${API_BASE}${path}`, { ...options, headers });
-    }
-  }
-
-  return res;
+  return fetch(`${API_BASE}${path}`, { ...options, headers });
 }
 
 /**
