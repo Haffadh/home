@@ -14,8 +14,8 @@ verification audit. Written 2026-08-15.
 
 A single Next.js 16 app (`frontend/`, App Router, React 19, Tailwind 4,
 Framer Motion 12) backed by Supabase Postgres. No separate backend — the API
-is Next.js route handlers. Hosting is currently ambiguous — see §9 — and
-nothing newer than 2026-05-27 is live anywhere.
+is Next.js route handlers. Production is Vercel (project `home`), but nothing
+newer than 2026-05-27 has been deployed — see §9.
 
 Its job: Abdullah (household staff) sees today's tasks on a tablet and marks
 them done or skipped; the family sets the menu, creates tasks, and sends him
@@ -139,7 +139,10 @@ guards; state-driven `disabled` leaves a same-frame double-fire window.
 
 Run against a real production build (`next build` + `next start`), driven with
 puppeteer. Mutation endpoints were stubbed via request interception so the
-live household database was never written to.
+live household database was left alone. One exception, caught afterwards: the
+first family-panel run matched the stub against `/api/requests` while the
+client actually fetches the rewritten bare path `/requests`, so one real row
+("STUB — not saved") was created and has since been deleted.
 
 | Check | Result |
 |---|---|
@@ -188,26 +191,49 @@ then.
 Two things make the handoff impossible today. Neither is cosmetic.
 
 **1. None of this is deployed.** `origin/main` on `github.com/Haffadh/home` is
-at `0dc66ba`, last pushed 2026-05-27, and the last production deployment was
-that same commit (to Railway). Every commit from the dish dropdown onward —
+at `0dc66ba`, last pushed 2026-05-27, and the last production deployment
+recorded on GitHub was that same commit. Every commit from the dish dropdown onward —
 including all five Hearth phases and the motion fix — exists only on this
-machine. **Whatever the family opens today is the pre-Hearth May app.** Seven
-commits are unpushed. Note also that `frontend/.vercel/project.json` points at
-a Vercel project (`home`), while GitHub's deployment history says Railway, so
-where production actually lives needs confirming before pushing anything.
+machine. **Whatever the family opens today is the pre-Hearth May app.** Nine
+commits are unpushed. Production is the Vercel project `home` (confirmed by
+Nawaf 2026-08-15); GitHub's older deployment records mention Railway, which
+appears to be a superseded host.
 
 **2. Only 3 of 7 family accounts exist.** Abdullah, Admin and Nawaf are real.
 Moeen, Samya, Ahmed and Mariam are defined in `lib/roles.ts` with passwords but
 have **no database rows**, so they cannot log in at all. They need creating
 before `/panel/family` means anything to them.
 
+## 9a. Security — read before deploying publicly
+
+Fine on a dormant app; not fine on a public URL.
+
+- **`POST /api/auth/register` is completely unauthenticated and honours an
+  arbitrary `role` in the body.** Anyone who can reach the deployment can
+  create themselves an `admin` account. Verified 2026-08-15 with a deliberately
+  incomplete payload (400 "name is required" — a validation error, never an
+  auth error), so nothing was created. This is the one to fix before the app
+  is reachable from the internet.
+- **Passwords are the published convention `{Name}#1`**, listed in
+  `lib/roles.ts`, which is in the repo. Anyone who knows a family member's
+  first name can log in as them.
+- **`POST /urgent_tasks` is unauthenticated**, so request rows can be created
+  by anyone.
+- The `/dashboard` token is the one credential that is properly handled
+  (header-only, timing-safe compare, rejects JWTs).
+
 ## 10. Known rough edges
 
 - **`CLAUDE.md` is stale and actively misleading.** It documents a much larger
   app that was removed in `2319b22`, and names the wrong Supabase project.
-- **Test data is visible in the live app.** Today's task list contains
-  "Gaynessssss", "Optimistic test" and "Skip test"; Nawaf's request history
-  contains "Phase 4 curl check". Delete these before the family sees them.
+- **Test data: mostly cleaned 2026-08-15.** Tasks "Gaynessssss", "Optimistic
+  test" and "Skip test" were deactivated (`is_active: false`, the same soft
+  delete the admin panel performs, so they are recoverable); requests "Phase 4
+  curl check" and "STUB — not saved" were deleted outright. Only "Take out the
+  trash" remains active. Requests 1–4 ("Fresh towels please", "Extra blankets
+  tonight", "AC filter cleaning", "Water the garden plants") were left alone —
+  they read as plausible real requests from the Phase 2 session, all already
+  marked done. Delete them if they were seeds.
 - **`dashboard/summary` takes ~5–6s.** Supabase is in Sydney and the endpoint
   upserts task instances sequentially. Fine behind a 60s poll; it would need
   batching if it ever became user-facing.
