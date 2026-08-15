@@ -104,6 +104,51 @@ then stored locally and the bare `/dashboard` URL works. The summary endpoint
 accepts only the `X-Dashboard-Token` header (timing-safe compare) and rejects
 JWTs outright — verified in §7.
 
+The token is 64 lowercase hex characters and the server **compares length
+before contents**, so a partially-copied token is an indistinguishable 401.
+The dashboard now prints the stored length in its re-pairing state precisely
+so that mistake is visible from across the room — see §5a.
+
+**Installed as an app.** `/dashboard` ships a manifest
+(`public/dashboard.webmanifest`, `display: standalone`) and the Apple meta
+tags, both scoped by `app/dashboard/layout.tsx`; the three panels are
+deliberately left as ordinary Safari pages. Add to Home Screen gives a
+fullscreen dashboard with no URL bar. Two things worth knowing:
+
+- the manifest contains **no pairing token** and never should — it is a public
+  URL, so `start_url` is a bare `/dashboard`. Pairing stays a one-time action
+  performed on the device;
+- iOS *may* treat the Home Screen app as a separate storage context from
+  Safari. If the standalone app opens on "This screen needs pairing", open the
+  `?token=` URL once **inside the standalone app** rather than in Safari.
+
+## 5a. Dashboard failure states
+
+The wall screen has four resting states and none of them is blank. This
+matters more than it sounds: the original build had exactly one failure path,
+and it rendered as a clock over three invisible skeleton blocks, indefinitely.
+
+| State | What is on screen |
+|---|---|
+| paired, hub answering | menu, progress, up next, request count |
+| paired, hub refuses the token (401/403) | "This screen needs re-pairing", what to do, and the stored token's length |
+| paired, hub unreachable | "Can't reach the hub", and how many attempts have failed |
+| not paired | "This screen needs pairing" |
+
+With figures already on screen, a failure keeps them and adds an accent dot
+and `last updated HH:MM` — stale numbers are more useful than none, as long as
+the screen says they are stale. The last good summary is cached in
+localStorage (`shh_dashboard_last`), stamped with its day and discarded once
+that day passes, so a reboot shows the household's day rather than nothing;
+yesterday's menu presented as today's would be worse than blank.
+
+A rejection is reported immediately because it can never fix itself. An
+unreachable hub is debounced by three cycles once a live answer has been seen —
+a single blip means the figures are at most three minutes old, and a flapping
+indicator on a wall is noise. The token is **never cleared** on a 401: a deploy
+that drops `DASHBOARD_TOKEN` server-side (§9) would otherwise unpair a healthy
+tablet, and as it stands the screen recovers by itself when the hub is fixed.
+
 ## 6. API surface
 
 All under `/api/*`; `next.config.mjs` also rewrites the bare paths
@@ -207,6 +252,8 @@ client actually fetches the rewritten bare path `/requests`, so one real row
 | Banned motion patterns | no springs, no scale animations, no cascade longer than one delayed element; the legacy `.stagger-*` / `.animate-fade-in` classes in `globals.css` are dead code, referenced by nothing |
 | popLayout card reorder | animated normally (125 mid-flight card-frames); **0** under reduced motion — checked by sampling painted transforms, since Framer's FLIP layout animations are invisible to `document.getAnimations()` |
 | **Staff-panel role guard, on production** | Abdullah logs in, panel renders, Done → 200 → `done` and Skip → 200 → `skipped` on the server; admin opens `/panel/abdullah` and sees the full panel; Nawaf typing `/panel/abdullah` lands on `/panel/family` having fired **0** staff API calls; Nawaf's token gets **403** on `complete`, `skip` and `GET /daily-tasks`; the wall dashboard pairs, shows the right progress and survives the bare URL; a request sent from the family panel appears on Abdullah's and marks done (§10a) |
+| **Dashboard failure states, on production** | healthy render unchanged; rejected token → "This screen needs re-pairing" on the first refusal, with the stored length (37 vs the real 64) shown; unreachable → "Can't reach the hub" in words, not blocks; hub lost while data was up → figures kept plus a 14px `rgb(180,71,27)` dot and "last updated 16:38"; reload with the hub down → cached day rendered immediately and marked stale (§5a) |
+| **Standalone install, WebKit iPad profile** | manifest served as `application/manifest+json`, all four icons 200, both capability meta tags present, `viewport-fit=cover` set, `.hearth-safe-area` applied, `start_url` relaunch stays paired; the three panels carry no manifest and still log in and render. Real notch insets and iOS standalone storage need the physical iPad |
 | Client JS, dashboard route | 769 KB uncompressed — in line with the other Hearth routes (770–784 KB); `/login` is 626 KB without Framer. Not an outlier; no lazy-loading needed. |
 
 Three motion defects were found and fixed in this pass:
@@ -306,6 +353,21 @@ flow — store the `refreshToken` that `/auth/login` returns and call it.
 - **`dashboard/summary` takes ~5–6s.** Supabase is in Sydney and the endpoint
   upserts task instances sequentially. Fine behind a 60s poll; it would need
   batching if it ever became user-facing.
+- **The pairing model is wrong for an unattended screen, and this is unfixed.**
+  The wall tablet's credential is a bearer token in `localStorage`, put there
+  by script. Safari's ITP deletes script-writable storage after **7 days
+  without user interaction with the site**, and a wall tablet nobody touches
+  is the exact case that rule describes. Nothing has been observed doing this
+  yet — an eviction would show "This screen needs pairing", which has not been
+  reported — but the model guarantees a recurring, silent unpairing.
+  The fix is to stop keeping the credential in script-writable storage: have
+  `?token=` hit a route handler that sets an **HttpOnly, Secure, SameSite=Lax
+  cookie** with a long `Max-Age` and redirects to a clean `/dashboard`, then
+  have `dashboard/summary` accept that cookie as well as the header. Cookies
+  set by a `Set-Cookie` response header are not subject to the 7-day
+  script-writable cap, and the token stops being reachable from JS at all.
+  Deliberately not done in this pass; it is a change to how the device
+  authenticates, not a bug fix.
 - **Admin's task list shows a plain "Loading…"** where the other surfaces use
   a skeleton that crossfades into content. Cosmetic inconsistency only.
 - **There is still no navigation between panels.** Each surface is a bare URL;
