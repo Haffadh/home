@@ -112,9 +112,10 @@ prefix.
 - `auth/{login,logout,me,refresh,register}` — `register` is admin-only;
   `role-login` was deleted 2026-08-15 (it was an auth bypass, see §9a)
 - `daily-tasks`, `daily-tasks/[id]`, `daily-tasks/[id]/{complete,skip}` —
-  `staff_user_id` is an optional override on both GET and POST. Omit it and
-  the server resolves the staff user by role (`lib/server/services/staffUser.ts`).
-  No surface passes it; see §7a.
+  staff + admin only, family tokens get 403 (see §10a). `staff_user_id` is an
+  optional override on both GET and POST. Omit it and the server resolves the
+  staff user by role (`lib/server/services/staffUser.ts`). No surface passes
+  it; see §7a.
 - `meals`, `meals/[id]` — `POST` is family + admin. Staff may read the menu
   but not set it.
 - `requests` (POST), `requests/mine` (GET, scoped to the caller),
@@ -204,6 +205,7 @@ client actually fetches the rewritten bare path `/requests`, so one real row
 | Burn-in drift | steps at exactly t+3min to `translate(5px, 2px)` and eases over 60s |
 | Banned motion patterns | no springs, no scale animations, no cascade longer than one delayed element; the legacy `.stagger-*` / `.animate-fade-in` classes in `globals.css` are dead code, referenced by nothing |
 | popLayout card reorder | animated normally (125 mid-flight card-frames); **0** under reduced motion — checked by sampling painted transforms, since Framer's FLIP layout animations are invisible to `document.getAnimations()` |
+| **Staff-panel role guard, on production** | Abdullah logs in, panel renders, Done → 200 → `done` and Skip → 200 → `skipped` on the server; admin opens `/panel/abdullah` and sees the full panel; Nawaf typing `/panel/abdullah` lands on `/panel/family` having fired **0** staff API calls; Nawaf's token gets **403** on `complete`, `skip` and `GET /daily-tasks`; the wall dashboard pairs, shows the right progress and survives the bare URL; a request sent from the family panel appears on Abdullah's and marks done (§10a) |
 | Client JS, dashboard route | 769 KB uncompressed — in line with the other Hearth routes (770–784 KB); `/login` is 626 KB without Framer. Not an outlier; no lazy-loading needed. |
 
 Three motion defects were found and fixed in this pass:
@@ -294,7 +296,10 @@ flow — store the `refreshToken` that `/auth/login` returns and call it.
   trash" remains active. Requests 1–4 ("Fresh towels please", "Extra blankets
   tonight", "AC filter cleaning", "Water the garden plants") were left alone —
   they read as plausible real requests from the Phase 2 session, all already
-  marked done. Delete them if they were seeds.
+  marked done. Delete them if they were seeds. The §10a verification created
+  two throwaway tasks (ids 9, 10, both `is_active: false` again) and one
+  request row (id 9, deleted outright); nothing else in the household data was
+  touched, and Nawaf's real pending "Lunch" request was left alone.
 - **`dashboard/summary` takes ~5–6s.** Supabase is in Sydney and the endpoint
   upserts task instances sequentially. Fine behind a 60s poll; it would need
   batching if it ever became user-facing.
@@ -305,9 +310,7 @@ flow — store the `refreshToken` that `/auth/login` returns and call it.
   on the family panel as well as admin, which removes the one case where this
   actually blocked people, but an admin still cannot reach `/panel/admin` from
   `/panel/family` without re-authenticating.
-- **`/panel/abdullah` has no role guard.** Anyone signed in can open it. It now
-  shows the staff tasks rather than an empty list, which is the safer failure,
-  but it is not access-controlled.
+- ~~**`/panel/abdullah` has no role guard.**~~ **Closed 2026-08-15** — see §10a.
 - **The done-task exit runs at 500ms (`ambient`)**, not the 300ms `base` used
   for other transitions. It reads as "set down, not deleted", so it was left
   alone — but it is a deliberate deviation from the token vocabulary.
@@ -315,6 +318,45 @@ flow — store the `refreshToken` that `/auth/login` returns and call it.
   only surface not on the design system.
 - **`POST /urgent_tasks` is unauthenticated.** Left open intentionally, but it
   means anyone who can reach the deployment can create a request row.
+
+## 10a. The staff panel is role-guarded — 2026-08-15
+
+`/panel/abdullah` and everything behind it are now `abdullah` + `kitchen` +
+`admin` only. The role set is `STAFF_PANEL_ROLES` in `lib/roles.ts`, used by
+both halves of the guard so they cannot drift apart. Admin is included
+deliberately: it is how the household admin checks what Abdullah sees without a
+second account.
+
+**Server — this is the enforcement.** `requireRole` on `GET`/`POST
+/daily-tasks`, `PATCH /daily-tasks/[id]`, and `/daily-tasks/[id]/{complete,skip}`.
+A family token gets 403 on all of them, from a browser or from curl.
+
+**Client — this is only the courtesy.** `useRoleGuard` in
+`app/components/auth/useRoleGuard.ts` sends a family member to `/panel/family`
+instead of showing them an error. Two properties matter if you touch it:
+
+- It **denies only on positive evidence**. A missing or unrecognised
+  `shh_role` renders the page and lets the server decide. The opposite —
+  redirect unless proven allowed — would sign the shared staff tablet out of
+  its own panel the first time its localStorage lost `shh_role` while keeping
+  the token, and that panel is the one that must never break.
+- For an allowed role it **never sets state**, so Abdullah's page renders,
+  fetches and animates exactly as it did before the guard existed.
+
+The loader effect calls the synchronous `isRoleDenied()` rather than reading
+the hook's flag: every effect in a commit runs before React processes state set
+by an earlier one, so the flag arrives after the fetches have already gone out.
+Checking synchronously means a family member's browser never calls
+`/daily-tasks`, `/urgent_tasks` or `/users` at all on the way out — verified,
+zero staff requests fired.
+
+Two things were deliberately left alone. The dashboard's device token never
+touches this: `dashboard/summary` reads the same service directly and does not
+go through the JWT middleware at all. And `/urgent_tasks` + `/requests/[id]/done`
+keep their own `abdullah` + `admin` guards — importing `STAFF_PANEL_ROLES`
+there would silently widen them to `kitchen`.
+
+The panel-to-panel navigation gap in §10 is still open, by choice.
 
 ## 11. Running it
 
