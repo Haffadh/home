@@ -208,6 +208,17 @@ before `/panel/family` means anything to them.
 
 Fine on a dormant app; not fine on a public URL.
 
+- **`POST /api/auth/role-login` is a complete authentication bypass.** It
+  takes a role *string only* — no password, no credentials, no auth header —
+  and returns a valid **30-day JWT** for that role, `admin` included.
+  Verified 2026-08-15: `curl -X POST /api/auth/role-login -d '{"role":"admin"}'`
+  returns a token that is accepted by `/users`, `/urgent_tasks` and
+  `/daily-tasks` (all 200). The login form is decorative as a security
+  boundary; passwords protect nothing while this exists. It cannot simply be
+  deleted — `lib/api.ts` calls it for silent token refresh, so removing it
+  breaks re-authentication on every surface. The real fix is to move that
+  refresh onto the existing `/api/auth/refresh` refresh-token flow and drop
+  `role-login` entirely.
 - **`POST /api/auth/register` is completely unauthenticated and honours an
   arbitrary `role` in the body.** Anyone who can reach the deployment can
   create themselves an `admin` account. Verified 2026-08-15 with a deliberately
