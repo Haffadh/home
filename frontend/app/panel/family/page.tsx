@@ -24,6 +24,7 @@ import {
 } from "@/app/components/MenuCard";
 import { DUR, EASE } from "@/lib/design/tokens";
 import { useInstantMotion } from "@/lib/design/motion";
+import { MenuEditor } from "@/app/components/MenuEditor";
 
 /* ── Types mirror /api/requests exactly. ─────────────────────────────────── */
 
@@ -417,6 +418,14 @@ export default function FamilyPage() {
             </motion.div>
           )}
         </AnimatePresence>
+      </Section>
+
+      {/* ── Set today's menu ──────────────────────────────────────────────────
+          Deciding what the household eats is a family act, so it lives here
+          rather than only on the admin panel — there is no navigation between
+          panels, and this is the only surface most of the family ever opens. */}
+      <Section heading="What are we eating?">
+        <MenuEditor date={date} authFetch={authFetch} onSaved={load} />
       </Section>
     </PageShell>
   );

@@ -11,10 +11,16 @@ import {
   getTasksWithInstances,
   createDailyTask,
 } from "@/lib/server/services/dailyTasksDb";
+import { getStaffUserId } from "@/lib/server/services/staffUser";
 
 /**
- * GET /api/daily-tasks?staff_user_id=&date=
+ * GET /api/daily-tasks?date=&staff_user_id=
  * Get daily tasks with materialized instances for a staff user and date.
+ *
+ * `staff_user_id` is optional and rarely wanted: omit it and the server
+ * resolves the staff user by role, which is what every surface should do.
+ * Passing the signed-in user's id is what made the staff panel render an
+ * empty list for anyone who was not Abdullah.
  */
 export async function GET(request: Request) {
   const auth = authenticateRequest(request);
@@ -22,10 +28,13 @@ export async function GET(request: Request) {
 
   try {
     const { searchParams } = new URL(request.url);
-    const staffUserId = parseInt(searchParams.get("staff_user_id") || "", 10);
+    const requested = searchParams.get("staff_user_id");
+    const staffUserId = requested
+      ? parseInt(requested, 10)
+      : await getStaffUserId();
 
-    if (isNaN(staffUserId)) {
-      return errorResponse(400, "staff_user_id is required (integer)");
+    if (staffUserId === null || Number.isNaN(staffUserId)) {
+      return errorResponse(400, "No staff user exists to list tasks for");
     }
 
     const today = new Date().toISOString().slice(0, 10);
@@ -73,8 +82,17 @@ export async function POST(request: Request) {
       return errorResponse(400, `recurrence must be one of: ${validRecurrences.join(", ")}`);
     }
 
+    /* Resolved server-side when the caller does not say. The admin panel used
+       to have to fetch /users first just to learn this id, which left its
+       "Add task" button dead for the ~5s that took — a click in that window
+       did nothing at all, with no error. It no longer needs to know. */
+    const staffUserId = body.staff_user_id ?? (await getStaffUserId());
+    if (staffUserId === null) {
+      return errorResponse(400, "No staff user exists to assign this task to");
+    }
+
     const payload = {
-      staff_user_id: body.staff_user_id ?? 1,
+      staff_user_id: staffUserId,
       title: String(body.title),
       notes: body.notes ?? "",
       window_start: body.window_start ?? "08:00",

@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { Check, Plus, Trash } from "@phosphor-icons/react";
-import { DISH_GROUPS } from "@/lib/dishes";
 import {
   Badge,
   Button,
@@ -18,9 +17,8 @@ import {
 } from "@/app/components/ui";
 import { DUR, EASE } from "@/lib/design/tokens";
 import { useInstantMotion } from "@/lib/design/motion";
+import { MenuEditor } from "@/app/components/MenuEditor";
 
-type User = { id: number; name: string; role: string };
-type Meal = { id: number; date: string; meal_type: "breakfast" | "lunch" | "dinner"; name: string };
 type DailyTask = {
   id: number;
   title: string;
@@ -38,14 +36,6 @@ type DailyTask = {
 
 const RECURRENCE_OPTIONS = ["daily", "weekly", "none"];
 
-const MEAL_SLOTS = ["breakfast", "lunch", "dinner"] as const;
-
-const SLOT_LABEL: Record<(typeof MEAL_SLOTS)[number], string> = {
-  breakfast: "Breakfast",
-  lunch: "Lunch",
-  dinner: "Dinner",
-};
-
 function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -53,20 +43,9 @@ function todayISO(): string {
 export default function AdminPage() {
   const router = useRouter();
   const reduceMotion = useInstantMotion();
-  const [, setUsers] = useState<User[]>([]);
-  const [staffId, setStaffId] = useState<number | null>(null);
   const [tasks, setTasks] = useState<DailyTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  const [menu, setMenu] = useState<Record<"breakfast" | "lunch" | "dinner", string>>({
-    breakfast: "",
-    lunch: "",
-    dinner: "",
-  });
-  const [menuSaving, setMenuSaving] = useState(false);
-  const [menuSavedAt, setMenuSavedAt] = useState<number | null>(null);
-  const [menuError, setMenuError] = useState<string | null>(null);
 
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
@@ -74,9 +53,8 @@ export default function AdminPage() {
   const [windowEnd, setWindowEnd] = useState("12:00");
   const [recurrence, setRecurrence] = useState("daily");
   const [creating, setCreating] = useState(false);
-  /* Synchronous re-entry guards — see the panels: state-driven disabling
-     leaves a same-frame double-fire window; refs close it. */
-  const savingRef = useRef(false);
+  /* Synchronous re-entry guard — state-driven disabling leaves a same-frame
+     double-fire window; a ref closes it. */
   const creatingRef = useRef(false);
 
   const authFetch = useCallback(
@@ -103,25 +81,11 @@ export default function AdminPage() {
     [router]
   );
 
-  const loadUsers = useCallback(async () => {
-    try {
-      const res = await authFetch("/users");
-      const data = await res.json();
-      const list: User[] = Array.isArray(data) ? data : [];
-      setUsers(list);
-      const abdullah = list.find((u) => u.role === "abdullah");
-      if (abdullah && staffId === null) setStaffId(abdullah.id);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load users");
-    }
-  }, [authFetch, staffId]);
-
   const loadTasks = useCallback(async () => {
-    if (staffId === null) return;
     setLoading(true);
     setError(null);
     try {
-      const res = await authFetch(`/daily-tasks?staff_user_id=${staffId}&date=${todayISO()}`);
+      const res = await authFetch(`/daily-tasks?date=${todayISO()}`);
       const data = await res.json();
       if (!res.ok || !data.ok) {
         setError(data.error || "Failed to load tasks");
@@ -133,74 +97,15 @@ export default function AdminPage() {
     } finally {
       setLoading(false);
     }
-  }, [authFetch, staffId]);
-
-  const loadMenu = useCallback(async () => {
-    try {
-      const res = await authFetch(`/meals?date=${todayISO()}`);
-      const data = await res.json();
-      if (!res.ok || !data.ok) return;
-      const next = { breakfast: "", lunch: "", dinner: "" };
-      for (const m of data.meals as Meal[]) {
-        if (m.meal_type in next) next[m.meal_type] = m.name;
-      }
-      setMenu(next);
-    } catch {
-      // ignore
-    }
   }, [authFetch]);
-
-  useEffect(() => {
-    void loadUsers();
-  }, [loadUsers]);
 
   useEffect(() => {
     void loadTasks();
   }, [loadTasks]);
 
-  useEffect(() => {
-    void loadMenu();
-  }, [loadMenu]);
-
-  async function saveMenu() {
-    if (savingRef.current) return;
-    savingRef.current = true;
-    setMenuSaving(true);
-    setMenuError(null);
-    const date = todayISO();
-    const slots: ("breakfast" | "lunch" | "dinner")[] = ["breakfast", "lunch", "dinner"];
-    try {
-      const results = await Promise.all(
-        slots
-          .filter((slot) => menu[slot].trim() !== "")
-          .map((slot) =>
-            authFetch("/meals", {
-              method: "POST",
-              body: JSON.stringify({ date, meal_type: slot, name: menu[slot].trim() }),
-            })
-          )
-      );
-      const failed = results.find((r) => !r.ok);
-      if (failed) {
-        const data = await failed.json().catch(() => ({}));
-        setMenuError(data.error || "Save failed");
-        return;
-      }
-      setMenuSavedAt(Date.now());
-      setTimeout(() => {
-        setMenuSavedAt((t) => (t && Date.now() - t >= 2000 ? null : t));
-      }, 2000);
-    } catch (err) {
-      setMenuError(err instanceof Error ? err.message : "Save failed");
-    } finally {
-      savingRef.current = false;
-      setMenuSaving(false);
-    }
-  }
-
   async function createTask(e: React.FormEvent) {
     e.preventDefault();
-    if (!title.trim() || staffId === null || creatingRef.current) return;
+    if (!title.trim() || creatingRef.current) return;
     creatingRef.current = true;
     setCreating(true);
     try {
@@ -212,7 +117,6 @@ export default function AdminPage() {
           window_start: windowStart,
           window_end: windowEnd,
           recurrence,
-          staff_user_id: staffId,
         }),
       });
       const data = await res.json();
@@ -257,75 +161,7 @@ export default function AdminPage() {
       }
     >
       {/* ── Today's menu ──────────────────────────────────────────────────── */}
-      <Card className="mb-h8">
-        <CardLabel>Today&apos;s menu</CardLabel>
-        <div className="mt-h4 flex flex-col gap-h4">
-          {MEAL_SLOTS.map((slot) => (
-            <div
-              key={slot}
-              className="grid items-end gap-h3 md:grid-cols-[1fr_16rem]"
-            >
-              <Input
-                label={SLOT_LABEL[slot]}
-                value={menu[slot]}
-                onChange={(e) => setMenu((m) => ({ ...m, [slot]: e.target.value }))}
-                placeholder={`What's for ${slot}?`}
-              />
-              <Select
-                label={`Pick a dish for ${slot}`}
-                hideLabel
-                value=""
-                onChange={(e) => {
-                  const dish = e.target.value;
-                  if (!dish) return;
-                  setMenu((m) => ({ ...m, [slot]: dish }));
-                }}
-              >
-                <option value="">Pick a dish…</option>
-                {DISH_GROUPS.map((group) => (
-                  <optgroup key={group.category} label={group.category}>
-                    {group.dishes.map((dish) => (
-                      <option key={dish} value={dish}>
-                        {dish}
-                      </option>
-                    ))}
-                  </optgroup>
-                ))}
-              </Select>
-            </div>
-          ))}
-        </div>
-        <div className="mt-h5 flex items-center gap-h4">
-          <Button type="button" onClick={saveMenu} loading={menuSaving}>
-            Save menu
-          </Button>
-          <AnimatePresence initial={false}>
-            {menuSavedAt && (
-              <motion.span
-                key="saved"
-                initial={reduceMotion ? false : { opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{
-                  opacity: 0,
-                  transition: { duration: reduceMotion ? 0 : DUR.fast },
-                }}
-                transition={
-                  reduceMotion
-                    ? { duration: 0 }
-                    : { duration: DUR.fast, ease: EASE.out }
-                }
-              >
-                <Badge tone="done" icon={<Check size={14} weight="bold" />}>
-                  Saved
-                </Badge>
-              </motion.span>
-            )}
-          </AnimatePresence>
-          {menuError && (
-            <p className="text-h8 font-medium text-hearth-accent">{menuError}</p>
-          )}
-        </div>
-      </Card>
+      <MenuEditor date={todayISO()} authFetch={authFetch} className="mb-h8" />
 
       {/* ── New task ──────────────────────────────────────────────────────── */}
       <Card className="mb-h8">
@@ -373,7 +209,7 @@ export default function AdminPage() {
             <Button
               type="submit"
               loading={creating}
-              disabled={creating || staffId === null}
+              disabled={creating}
               icon={<Plus size={18} weight="bold" />}
             >
               Add task

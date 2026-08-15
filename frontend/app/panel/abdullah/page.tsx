@@ -120,19 +120,19 @@ export default function AbdullahPage() {
     setLoading(true);
     setError(null);
     try {
-      const userId = localStorage.getItem("shh_user_id");
       const userName = localStorage.getItem("shh_user_name") || "";
       setStaffName(userName);
-      if (!userId) {
-        setError("Please sign in again.");
-        setLoading(false);
-        return;
-      }
+
+      /* No staff_user_id: the server resolves it by role. This panel runs on a
+         shared tablet, and keying the query off the signed-in user meant that
+         anyone who was not Abdullah saw "No tasks today" while his tasks sat
+         there under his id. The tasks shown are the household's staff tasks,
+         not the viewer's. */
 
       /* Requests and names are best-effort — if either fetch fails, the daily
          task list still has to render exactly as before. */
       const [tasksRes, mealsRes, requestsRes, usersRes] = await Promise.all([
-        authFetch(`/daily-tasks?staff_user_id=${userId}&date=${date}`),
+        authFetch(`/daily-tasks?date=${date}`),
         authFetch(`/meals?date=${date}`),
         authFetch("/urgent_tasks").catch(() => null),
         authFetch("/users").catch(() => null),

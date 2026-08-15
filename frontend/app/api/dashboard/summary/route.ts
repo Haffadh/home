@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/server/db";
 import { errorResponse } from "@/lib/server/middleware";
 import { getTasksWithInstances } from "@/lib/server/services/dailyTasksDb";
+import { getStaffUserId } from "@/lib/server/services/staffUser";
 
 /**
  * GET /api/dashboard/summary
@@ -52,16 +53,10 @@ export async function GET(request: Request) {
     let total = 0;
     let next: NextTask[] = [];
 
-    const { data: abdullah } = await db
-      .from("users")
-      .select("id")
-      .eq("role", "abdullah")
-      .order("id", { ascending: true })
-      .limit(1)
-      .maybeSingle();
+    const staffUserId = await getStaffUserId();
 
-    if (abdullah) {
-      const { tasks } = await getTasksWithInstances(abdullah.id, today);
+    if (staffUserId !== null) {
+      const { tasks } = await getTasksWithInstances(staffUserId, today);
       type Row = {
         title: string;
         window_start: string;

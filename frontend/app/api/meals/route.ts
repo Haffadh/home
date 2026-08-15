@@ -42,14 +42,30 @@ export async function GET(request: Request) {
   }
 }
 
+/** Who may decide what the household eats: the family, plus admin. Staff are
+    deliberately excluded — the menu is what the family is asking for, and
+    Abdullah's panel reads it as an instruction. */
+const MENU_SETTERS = [
+  "admin",
+  "moeen",
+  "samya",
+  "nawaf",
+  "ahmed",
+  "mariam",
+];
+
 /**
- * POST /api/meals — admin only.
+ * POST /api/meals — family + admin.
  * Body: { date, meal_type, name }. Upserts on (date, meal_type).
+ *
+ * Was admin-only, which made the menu unreachable in practice: family accounts
+ * land on /panel/family and there is no navigation to the admin panel, so
+ * setting dinner meant signing out and back in as Admin.
  */
 export async function POST(request: Request) {
   const auth = authenticateRequest(request);
   if (isAuthError(auth)) return auth;
-  const roleErr = requireRole(auth, "admin");
+  const roleErr = requireRole(auth, ...MENU_SETTERS);
   if (roleErr) return roleErr;
 
   try {
