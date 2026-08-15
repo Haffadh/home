@@ -38,25 +38,33 @@ Login sends you to your role's default route via `defaultRouteFor()` in
 
 ## 3. Accounts
 
-All seven accounts exist and were verified logging in on 2026-08-15. Password
-convention is `{Name}#1`, defined in `lib/roles.ts`.
+Seven accounts, all verified logging in after the 2026-08-15 password
+rotation. **Passwords are deliberately not in this file or anywhere else in
+the repo** — they live in the database as scrypt hashes and in
+`CREDENTIALS.local.md` at the repo root, which is gitignored.
 
-| Name | Email | Password | Role | Lands on |
-|---|---|---|---|---|
-| Abdullah | `abdullah-1779806878@haffadh.local` | `Abdullah#1` | `abdullah` | `/panel/abdullah` |
-| Admin | `admin-1779809143@haffadh.local` | `Admin#1` | `admin` | `/panel/admin` |
-| Nawaf | `nawafhaffadh@gmail.com` | `Nawaf#1` | `nawaf` | `/panel/family` |
-| Moeen | `moeenhaffadh@gmail.com` | `Moeen#1` | `moeen` | `/panel/family` |
-| Samya | `drsamyabahram@yahoo.com` | `Samya#1` | `samya` | `/panel/family` |
-| Ahmed | `ahaffadh@gmail.com` | `Ahmed#1` | `ahmed` | `/panel/family` |
-| Mariam | `mhaffadh@gmail.com` | `Mariam#1` | `mariam` | `/panel/family` |
+| Name | Email | Role | Lands on |
+|---|---|---|---|
+| Abdullah | `abdullah-1779806878@haffadh.local` | `abdullah` | `/panel/abdullah` |
+| Admin | `admin-1779809143@haffadh.local` | `admin` | `/panel/admin` |
+| Nawaf | `nawafhaffadh@gmail.com` | `nawaf` | `/panel/family` |
+| Moeen | `moeenhaffadh@gmail.com` | `moeen` | `/panel/family` |
+| Samya | `drsamyabahram@yahoo.com` | `samya` | `/panel/family` |
+| Ahmed | `ahaffadh@gmail.com` | `ahmed` | `/panel/family` |
+| Mariam | `mhaffadh@gmail.com` | `mariam` | `/panel/family` |
 
-Nawaf's address changed from `nawaf@haffadh.local` to `nawafhaffadh@gmail.com`
-on 2026-08-15; the old one no longer works. `lib/roles.ts` also defines a
-`kitchen` role (routes to Abdullah's panel) with no account behind it.
+Nawaf's address changed from `nawaf@haffadh.local` on 2026-08-15; the old one
+no longer works. `lib/roles.ts` also defines a `kitchen` role (routes to
+Abdullah's panel) with no account behind it.
 
-New accounts are created through `POST /api/auth/register`, which now requires
-an admin token.
+Passwords are three random lowercase words joined by hyphens — memorable,
+and typeable on a phone without fighting autocapitalise. They replaced a
+`{Name}#1` convention that was itself committed in `lib/roles.ts`, so anyone
+with repo access could log in as anyone.
+
+New accounts go through `POST /api/auth/register`, which requires an admin
+token. There is no password-reset flow: changing an existing password means
+writing a fresh scrypt hash to the `users` row.
 
 Auth is a custom JWT (scrypt hashing, 30-day access tokens). The browser keeps
 `smarthub_token`, `token`, `shh_user_id`, `shh_user_name`, `shh_role` in
@@ -158,6 +166,7 @@ client actually fetches the rewritten bare path `/requests`, so one real row
 | Auth bypasses closed | `role-login` 404, `dev-token` 401 on a production build, `register` 401/403/400 |
 | Abdullah's panel after the auth change | logs in, loads, completes a task; guard and exit animation intact |
 | All seven accounts | log in and land on the correct panel; a brand-new account driven in the browser reaches `/panel/family` |
+| Password rotation | all seven rotated to passphrases and re-verified logging in; all four sampled old passwords rejected |
 | Login → each of the four surfaces | all render on Hearth |
 | Page-enter present, normal motion | 300ms fade+rise on every route |
 | Page-enter under `prefers-reduced-motion` | **0** painted frames of motion on all 5 routes (was ~19 frames / ~350ms — fixed this pass) |
@@ -225,12 +234,14 @@ was ever exploited because nothing has been deployed since May.
 | `Bearer dev-token` mapped to `{id:"dev", role:"admin"}` unconditionally, production included. | Gated on `NODE_ENV !== "production"`; returns 401 on a production build. |
 | `POST /api/auth/register` was unauthenticated and honoured an arbitrary `role` from the body. | Requires an authenticated admin (401 anonymous, 403 as a family role) and validates the role against the known set (400 otherwise). |
 
+Also fixed 2026-08-15: every password was rotated off the committed
+`{Name}#1` convention onto a random three-word passphrase, and the credential
+list was removed from `lib/roles.ts`, `README.md` and `CLAUDE.md`. Note that
+git *history* still contains the old ones — harmless now they are rotated, but
+it is the reason the new ones must never be committed.
+
 Still open, by choice:
 
-- **Passwords are the published convention `{Name}#1`**, listed in
-  `lib/roles.ts`, which is in the repo. Anyone who knows a family member's
-  first name can log in as them. Fine for a private household URL; not fine if
-  the deployment is ever shared or indexed.
 - **`POST /urgent_tasks` is unauthenticated**, so request rows can be created
   by anyone who can reach the app.
 - The `/dashboard` token is properly handled — header-only, timing-safe

@@ -149,3 +149,8 @@ backend/smart-home.db
 .DS_Store
 .vercel
 .env.vercel
+
+# Account passwords. Never commit these — the repo is the one place they must
+# not live. See docs/HANDOFF.md §3.
+CREDENTIALS.local.md
+*.local.md

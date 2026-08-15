@@ -31,17 +31,12 @@ export const ROLE_LABELS: Record<Role, string> = {
 
 export const LOGIN_LABELS: Record<Role, string> = { ...ROLE_LABELS };
 
-/** Password for each role: Name#1 */
-export const ROLE_PASSWORDS: Record<Role, string> = {
-  moeen: "Moeen#1",
-  samya: "Samya#1",
-  nawaf: "Nawaf#1",
-  ahmed: "Ahmed#1",
-  mariam: "Mariam#1",
-  abdullah: "Abdullah#1",
-  kitchen: "Kitchen#1",
-  admin: "Admin#1",
-};
+/* ROLE_PASSWORDS used to live here: a plaintext password for every role,
+   derived from the person's name, committed to the repo. It had no consumers,
+   so it was pure exposure — anyone with read access could log in as anyone.
+   Removed 2026-08-15, and every account was rotated onto a random passphrase
+   at the same time. Passwords now exist only as scrypt hashes in the database
+   and in the gitignored CREDENTIALS.local.md. Do not reintroduce them here. */
 
 /** Human name for the actor (used in tasks, meals, etc.) */
 export const ACTOR_NAME: Record<Role, string> = {

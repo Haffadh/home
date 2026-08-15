@@ -75,15 +75,16 @@ All routes accept `Authorization: Bearer <accessToken>`. The dev token `dev-toke
 ## End-to-end curl flow
 
 ```bash
-# 1. Register
+# 1. Register (admin only — pass an admin's accessToken)
 curl -X POST http://localhost:3000/auth/register \
   -H "Content-Type: application/json" \
-  -d '{"name":"Abdullah","email":"abdullah@example.com","password":"Abdullah#1","role":"abdullah"}'
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -d '{"name":"Abdullah","email":"abdullah@example.com","password":"<password>","role":"abdullah"}'
 
 # 2. Login → grab accessToken
 TOKEN=$(curl -s -X POST http://localhost:3000/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"abdullah@example.com","password":"Abdullah#1"}' \
+  -d '{"email":"abdullah@example.com","password":"<password>"}' \
   | python3 -c "import sys,json;print(json.load(sys.stdin)['accessToken'])")
 
 # 3. Create a daily task for user id 1

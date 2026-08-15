@@ -43,8 +43,10 @@ npm run lint           # ESLint
 - Fallback: polling via `RealtimeContext` dispatches `window` custom events every 8s.
 
 ### Auth & panels
-- Login at `/login` — family member list (Moeen, Samya, Nawaf, Ahmed, Mariam, Abdullah) + Kitchen option + triple-tap title → admin passcode `3866`.
-- Passwords: `{Name}#1` for each role (e.g., `Moeen#1`, `Kitchen#1`).
+- Login at `/login` — email + password.
+- **Credentials are never stored in this repo.** They live in the database
+  (scrypt-hashed) and in the gitignored `CREDENTIALS.local.md`. Do not add
+  passwords, passcodes or tokens to any tracked file.
 - Token in localStorage as `smarthub_token` / `token`. Supabase session also consulted.
 - **Panels:** `/panel/house` (family dashboard — simplified), `/panel/kitchen` (full dashboard), `/panel/admin` (full + admin controls). Room panels removed; rooms remain as task-assignment metadata in `frontend/lib/rooms.ts`.
 
