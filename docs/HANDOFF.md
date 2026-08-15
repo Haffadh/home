@@ -14,7 +14,8 @@ verification audit. Written 2026-08-15.
 
 A single Next.js 16 app (`frontend/`, App Router, React 19, Tailwind 4,
 Framer Motion 12) backed by Supabase Postgres. No separate backend — the API
-is Next.js route handlers. Deployed on Vercel (project `home`).
+is Next.js route handlers. Hosting is currently ambiguous — see §9 — and
+nothing newer than 2026-05-27 is live anywhere.
 
 Its job: Abdullah (household staff) sees today's tasks on a tablet and marks
 them done or skipped; the family sets the menu, creates tasks, and sends him
@@ -48,7 +49,7 @@ Password convention is `{Name}#1`. **Only three accounts actually exist:**
 `lib/roles.ts` also defines `moeen`, `samya`, `ahmed`, `mariam` and `kitchen`
 with passwords — but **those users do not exist in the database and cannot log
 in.** Creating them is the main blocker before handing this to the family
-(see §8).
+(see §9).
 
 Auth is a custom JWT (scrypt hashing, 30-day access tokens). The browser keeps
 `smarthub_token`, `token`, `shh_user_id`, `shh_user_name`, `shh_role` in
@@ -58,7 +59,8 @@ localStorage. Locally, `Authorization: Bearer dev-token` maps to
 ## 4. Environment variables
 
 `frontend/.env.local` (template committed as `frontend/.env.example`; `.env*`
-is otherwise gitignored). The same set must exist in Vercel.
+is otherwise gitignored). The same set must exist on whichever host serves
+production.
 
 | Var | Purpose |
 |---|---|
@@ -152,8 +154,10 @@ live household database was never written to.
 | `/requests/mine` scoping | returns only the caller's rows |
 | Family optimistic request-add | card appears in 18–20ms (not gated on the request), exactly 1 POST, animates normally, instant under reduced motion |
 | `/design` demo tiles | replay on tap under normal motion, instant under reduced motion |
-| Dashboard soak, 7 min | no ghost/stacked text, clock steps every minute, content stable |
+| Dashboard soak | 7 min pre-fix and 4 min on the final build: no ghost/stacked text, clock steps every minute, 60s refresh cycle holding, content stable |
 | Burn-in drift | steps at exactly t+3min to `translate(5px, 2px)` and eases over 60s |
+| Banned motion patterns | no springs, no scale animations, no cascade longer than one delayed element; the legacy `.stagger-*` / `.animate-fade-in` classes in `globals.css` are dead code, referenced by nothing |
+| popLayout card reorder | animated normally (125 mid-flight card-frames); **0** under reduced motion — checked by sampling painted transforms, since Framer's FLIP layout animations are invisible to `document.getAnimations()` |
 | Client JS, dashboard route | 769 KB uncompressed — in line with the other Hearth routes (770–784 KB); `/login` is 626 KB without Framer. Not an outlier; no lazy-loading needed. |
 
 Three motion defects were found and fixed in this pass:
@@ -179,11 +183,26 @@ simply not animate on first mount. Everything triggered by a user action or a
 data change is safe on Framer, because `useInstantMotion()` has long settled by
 then.
 
-## 9. Known rough edges
+## 9. Blockers before the family can use this
 
-- **Only 3 of 7 family accounts exist.** Moeen, Samya, Ahmed and Mariam are
-  defined in `lib/roles.ts` but have no database rows, so they cannot log in.
-  Create them before handing the app to the family.
+Two things make the handoff impossible today. Neither is cosmetic.
+
+**1. None of this is deployed.** `origin/main` on `github.com/Haffadh/home` is
+at `0dc66ba`, last pushed 2026-05-27, and the last production deployment was
+that same commit (to Railway). Every commit from the dish dropdown onward —
+including all five Hearth phases and the motion fix — exists only on this
+machine. **Whatever the family opens today is the pre-Hearth May app.** Seven
+commits are unpushed. Note also that `frontend/.vercel/project.json` points at
+a Vercel project (`home`), while GitHub's deployment history says Railway, so
+where production actually lives needs confirming before pushing anything.
+
+**2. Only 3 of 7 family accounts exist.** Abdullah, Admin and Nawaf are real.
+Moeen, Samya, Ahmed and Mariam are defined in `lib/roles.ts` with passwords but
+have **no database rows**, so they cannot log in at all. They need creating
+before `/panel/family` means anything to them.
+
+## 10. Known rough edges
+
 - **`CLAUDE.md` is stale and actively misleading.** It documents a much larger
   app that was removed in `2319b22`, and names the wrong Supabase project.
 - **Test data is visible in the live app.** Today's task list contains
@@ -202,7 +221,7 @@ then.
 - **`POST /urgent_tasks` is unauthenticated.** Left open intentionally, but it
   means anyone who can reach the deployment can create a request row.
 
-## 10. Running it
+## 11. Running it
 
 ```bash
 cd frontend
