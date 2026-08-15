@@ -95,7 +95,11 @@ function MotionExamples() {
         <motion.span
           key={fastKey}
           className="inline-block"
-          initial={instant ? false : { opacity: 0 }}
+          /* No animation on the FIRST mount (key 0): useInstantMotion() only
+             resolves after the first paint, so a mount-time animation plays
+             even when the OS asked for none. Replays are user-triggered and
+             happen long after the hook has settled. */
+          initial={instant || fastKey === 0 ? false : { opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={
             instant ? { duration: 0 } : { duration: DUR.fast, ease: EASE.out }
@@ -113,7 +117,7 @@ function MotionExamples() {
         <motion.div
           key={baseKey}
           className="rounded-h-md bg-hearth-sunk px-h4 py-h3 text-h8 text-hearth-ink"
-          initial={instant ? false : { opacity: 0, y: 8 }}
+          initial={instant || baseKey === 0 ? false : { opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={
             instant ? { duration: 0 } : { duration: DUR.base, ease: EASE.out }

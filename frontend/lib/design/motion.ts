@@ -11,15 +11,28 @@
  *     Phase 3). When nothing can be seen there is nothing to animate.
  */
 
-import { useEffect, useState } from "react";
-import { DUR, EASE } from "./tokens";
+import { useEffect, useLayoutEffect, useState } from "react";
+
+/** These hooks must settle BEFORE the browser paints, or the mount animation
+    they are meant to suppress has already started. useLayoutEffect runs
+    synchronously after render and before paint; on the server it does not run
+    at all and React warns, so fall back to useEffect there. */
+const useBeforePaint =
+  typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
 /** Own media-query read, not Framer's useReducedMotion: Framer snapshots a
     lazily-initialized global whose timing can miss a preference that was set
-    before the app booted. This reads the live value at mount and subscribes. */
+    before the app booted. This reads the live value at mount and subscribes.
+
+    Seeded false and corrected before paint rather than read during render:
+    a render-time read would disagree with the server-rendered markup and
+    trip hydration. Child effects run before parent effects, so Framer has
+    already queued the mount animation by the time this fires — but the state
+    update forces a synchronous re-render before paint, so the animation is
+    retargeted to duration 0 and no intermediate frame is ever shown. */
 export function usePrefersReducedMotion(): boolean {
   const [reduce, setReduce] = useState(false);
-  useEffect(() => {
+  useBeforePaint(() => {
     const mq = matchMedia("(prefers-reduced-motion: reduce)");
     const update = () => setReduce(mq.matches);
     update();
@@ -31,7 +44,7 @@ export function usePrefersReducedMotion(): boolean {
 
 export function usePageVisible(): boolean {
   const [visible, setVisible] = useState(true);
-  useEffect(() => {
+  useBeforePaint(() => {
     const update = () => setVisible(document.visibilityState === "visible");
     update();
     document.addEventListener("visibilitychange", update);
@@ -47,14 +60,9 @@ export function useInstantMotion(): boolean {
   return reduce || !visible;
 }
 
-/** The one page-enter treatment: subtle fade + small rise. No exit — exit
-    animations on navigation fight the router. */
-export function pageEnter(instant: boolean) {
-  return {
-    initial: instant ? false : ({ opacity: 0, y: 8 } as const),
-    animate: { opacity: 1, y: 0 } as const,
-    transition: instant
-      ? ({ duration: 0 } as const)
-      : ({ duration: DUR.base, ease: EASE.out } as const),
-  };
-}
+/* The page-enter used to live here as a Framer prop bundle. It is now the
+   `.hearth-page-enter` CSS animation applied by app/template.tsx — a mount-time
+   animation cannot be gated by a hook that only resolves after first paint.
+   Everything else on the surfaces animates in response to a user action or a
+   data change, i.e. well after useInstantMotion() has settled, so those stay
+   on Framer and keep using DUR/EASE below. */

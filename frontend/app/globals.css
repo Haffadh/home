@@ -301,3 +301,50 @@ nextjs-portal {
 .liquid-pulse {
   animation: gentlePulse 2s ease-in-out infinite;
 }
+
+/* The one Hearth page-enter: subtle fade + small rise, driven by CSS rather
+   than Framer on purpose. The enter fires at mount, and a JS hook cannot know
+   prefers-reduced-motion until after the first paint — so a Framer-driven
+   enter always played its full 300ms even for users who asked for no motion
+   (measured: ~19 painted frames below full opacity). A CSS animation is
+   evaluated by the browser with the media query already applied, so the
+   reduced-motion rule below collapses it to an instant swap with no timing
+   hazard. Uses the shared duration/easing tokens from hearth.css. */
+@keyframes hearth-page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.hearth-page-enter {
+  animation: hearth-page-enter var(--dur-h-base, 300ms)
+    var(--ease-h-out, cubic-bezier(0.16, 1, 0.3, 1)) both;
+}
+
+/* Reduced motion, document-wide. hearth.css carries the same rule scoped to
+   .theme-hearth; this one also covers the surfaces that are not on Hearth
+   (notably /login), so the preference is honoured everywhere rather than only
+   inside the design system. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* Not merely a 0.01ms animation: `both` fill paints the `from` keyframe
+     (opacity 0) for one frame before the animation collapses, which reads as
+     a flicker. Removing the animation outright leaves the element at its
+     natural resting state from the very first frame. */
+  .hearth-page-enter {
+    animation: none !important;
+  }
+}
