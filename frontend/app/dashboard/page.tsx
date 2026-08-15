@@ -3,7 +3,6 @@
 import {
   useCallback,
   useEffect,
-  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -31,7 +30,38 @@ type Summary = {
 };
 
 const TOKEN_KEY = "shh_dashboard_token";
+/* Last good summary, so a reboot shows the household's day instead of nothing.
+   Stamped with the day it was fetched and discarded if that day has passed —
+   a wall screen showing yesterday's menu as if it were today is worse than a
+   wall screen admitting it has nothing. */
+const CACHE_KEY = "shh_dashboard_last";
 const REFRESH_MS = 60_000;
+
+type Cached = { data: Summary; at: number; day: string };
+
+/**
+ * What the screen currently knows.
+ *
+ *  first-load  no answer yet, this session — the only state that may skeleton
+ *  live        the last request succeeded
+ *  unreachable the request failed (network, DNS, TLS, hub down)
+ *  rejected    the hub answered 401/403 — this screen's token is not accepted
+ *
+ * `rejected` is split out from `unreachable` because the two need opposite
+ * things from a human: one recovers by itself, the other never will.
+ */
+type Health = "first-load" | "live" | "unreachable" | "rejected";
+
+/** The server's notion of "today" — same expression it uses. */
+function dayKey(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+/** A timestamp as a wall clock reading. */
+function hhmm(ts: number): string {
+  const d = new Date(ts);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
 
 /* Burn-in care: the whole layout drifts through these offsets, one step every
    three minutes, moving over a full minute — far below the threshold of
@@ -103,22 +133,59 @@ export default function DashboardPage() {
   const [token, setToken] = useState<string | null>(null);
   const [tokenChecked, setTokenChecked] = useState(false);
 
-  useEffect(() => {
-    const url = new URL(window.location.href);
-    const fromQuery = url.searchParams.get("token");
-    if (fromQuery) {
-      localStorage.setItem(TOKEN_KEY, fromQuery);
-      url.searchParams.delete("token");
-      window.history.replaceState({}, "", url.pathname + url.search + url.hash);
-    }
-    setToken(localStorage.getItem(TOKEN_KEY));
-    setTokenChecked(true);
-  }, []);
-
   /* ── Data: one request per cycle, last good data wins ──────────────────── */
   const [data, setData] = useState<Summary | null>(null);
-  const failuresRef = useRef(0);
-  const [offline, setOffline] = useState(false);
+  const [lastGoodAt, setLastGoodAt] = useState<number | null>(null);
+  const [health, setHealth] = useState<Health>("first-load");
+  const [failures, setFailures] = useState(0);
+  const [everLive, setEverLive] = useState(false);
+
+  /* Pairing, cache hydration, and — critically — a guarantee that `tokenChecked`
+     is set no matter what. Reading or writing localStorage can throw outright
+     (a locked-down or storage-blocked WebView), and when that happened the whole
+     effect unwound: no token, no tokenChecked, and the page rendered nothing at
+     all, not even the "isn't paired" message. A `finally` closes that. */
+  useEffect(() => {
+    let stored: string | null = null;
+    try {
+      const url = new URL(window.location.href);
+      const fromQuery = url.searchParams.get("token");
+      if (fromQuery) {
+        /* Held in memory as well as written, so a freshly paired screen works
+           for this session even where the write is refused. */
+        stored = fromQuery;
+        try {
+          localStorage.setItem(TOKEN_KEY, fromQuery);
+        } catch {
+          /* ignore — the in-memory copy still pairs this session */
+        }
+        url.searchParams.delete("token");
+        window.history.replaceState({}, "", url.pathname + url.search + url.hash);
+      }
+      if (!stored) {
+        try {
+          stored = localStorage.getItem(TOKEN_KEY);
+        } catch {
+          stored = null;
+        }
+      }
+      try {
+        const raw = localStorage.getItem(CACHE_KEY);
+        if (raw) {
+          const cached = JSON.parse(raw) as Cached;
+          if (cached?.data && cached.day === dayKey()) {
+            setData(cached.data);
+            setLastGoodAt(cached.at);
+          }
+        }
+      } catch {
+        /* a corrupt or unreadable cache is simply no cache */
+      }
+    } finally {
+      setToken(stored);
+      setTokenChecked(true);
+    }
+  }, []);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -127,14 +194,39 @@ export default function DashboardPage() {
         headers: { "X-Dashboard-Token": token },
         cache: "no-store",
       });
+
+      /* The hub answered, and said no. Retrying cannot fix this — the token in
+         this screen's storage is not one the hub accepts — so it is reported as
+         its own state instead of being counted as another silent timeout. The
+         token is deliberately NOT cleared: a deploy that drops DASHBOARD_TOKEN
+         server-side (§9) would otherwise unpair a perfectly good tablet, and
+         this screen recovers on its own the moment the hub is fixed. */
+      if (res.status === 401 || res.status === 403) {
+        setHealth("rejected");
+        setFailures((f) => f + 1);
+        return;
+      }
+
       const json = await res.json();
       if (!res.ok || !json.ok) throw new Error(json.error || "bad response");
+
+      const at = Date.now();
       setData(json.data as Summary);
-      failuresRef.current = 0;
-      setOffline(false);
+      setLastGoodAt(at);
+      setHealth("live");
+      setEverLive(true);
+      setFailures(0);
+      try {
+        localStorage.setItem(
+          CACHE_KEY,
+          JSON.stringify({ data: json.data, at, day: dayKey() } satisfies Cached)
+        );
+      } catch {
+        /* no cache is survivable; a thrown write must not lose the render */
+      }
     } catch {
-      failuresRef.current += 1;
-      if (failuresRef.current >= 3) setOffline(true);
+      setHealth("unreachable");
+      setFailures((f) => f + 1);
     }
   }, [token]);
 
@@ -180,6 +272,16 @@ export default function DashboardPage() {
   const allDone = !!tasks && tasks.total > 0 && tasks.done >= tasks.total;
   const progressPct = tasks && tasks.total > 0 ? (tasks.done / tasks.total) * 100 : 0;
 
+  /* Once a live answer has been seen, tolerate two missed cycles before saying
+     anything — a single blip means the figures are at most three minutes old,
+     and a flapping indicator on a wall is just noise. Before any live answer
+     this session (a reboot rendering from cache), say so on the first failure:
+     there is nothing yet to protect, and the numbers on screen are unconfirmed.
+     A rejection is never transient, so it is never debounced. */
+  const degraded =
+    health === "rejected" || failures >= (everLive ? 3 : 1);
+  const stale = !!data && degraded;
+
   return (
     <div className="theme-hearth theme-hearth-root relative h-dvh overflow-hidden select-none">
       <div
@@ -189,13 +291,16 @@ export default function DashboardPage() {
           transition: reduceMotion ? undefined : "transform 60s linear",
         }}
       >
-        {/* Not paired: the only state that speaks to a human installer. */}
+        {/* Not paired. Read at two metres by whoever walks past first, which is
+            a family member, not the person who set the screen up. */}
         {tokenChecked && !token && (
-          <div className="flex h-full items-center justify-center px-h16">
-            <p className="max-w-[26em] text-center text-h5 text-hearth-ink-2">
-              This screen isn&apos;t paired. Open{" "}
-              <span className="h-tnum">/dashboard?token=&hellip;</span> once on
-              this device to pair it.
+          <div className="flex h-full flex-col items-center justify-center gap-h5 px-h16 text-center">
+            <p className="text-h3 font-semibold text-hearth-accent">
+              This screen needs pairing
+            </p>
+            <p className="max-w-[24em] text-h5 text-hearth-ink-2">
+              Open the dashboard link with its pairing token once on this
+              tablet, and the day&apos;s menu and tasks will appear here.
             </p>
           </div>
         )}
@@ -221,9 +326,43 @@ export default function DashboardPage() {
               </p>
             </div>
 
-            {/* ── Data column ──────────────────────────────────────────── */}
-            {!data ? (
-              /* First load only: skeleton matched to the real block heights. */
+            {/* ── Data column ────────────────────────────────────────────
+                 Every branch below says something a person can read from
+                 across the room. The skeleton is reachable only while the
+                 first request of the session is genuinely in flight — it used
+                 to be the resting state of every failure, three pale blocks
+                 pulsing for ever on a screen that looked simply broken. */}
+            {!data && health === "rejected" ? (
+              <div className="flex min-w-0 flex-col gap-h5" role="status">
+                <p className="text-h3 font-semibold text-hearth-accent">
+                  This screen needs re-pairing
+                </p>
+                <p className="text-h5 text-hearth-ink-2">
+                  The hub is answering, but it will not accept this screen&apos;s
+                  pairing token. Open the dashboard link with the token once on
+                  this tablet to fix it.
+                </p>
+                <p className="text-h7 text-hearth-ink-3">
+                  Refused {failures === 1 ? "once" : `${failures} times`} · token
+                  held here is {token?.length ?? 0} characters
+                </p>
+              </div>
+            ) : !data && health === "unreachable" ? (
+              <div className="flex min-w-0 flex-col gap-h5" role="status">
+                <p className="text-h3 font-semibold text-hearth-accent">
+                  Can&apos;t reach the hub
+                </p>
+                <p className="text-h5 text-hearth-ink-2">
+                  This screen is still trying, and will fill itself in the
+                  moment the hub answers.
+                </p>
+                <p className="text-h7 text-hearth-ink-3">
+                  No answer for {failures === 1 ? "1 attempt" : `${failures} attempts`}
+                </p>
+              </div>
+            ) : !data ? (
+              /* First request in flight: skeleton matched to the real block
+                 heights, and never on screen for more than one cycle. */
               <div className="flex min-w-0 flex-col gap-h10" aria-hidden>
                 <div className="h-[168px] animate-pulse rounded-h-lg bg-hearth-sunk" />
                 <div className="h-[104px] animate-pulse rounded-h-lg bg-hearth-sunk" />
@@ -373,35 +512,51 @@ export default function DashboardPage() {
                     </motion.p>
                   )}
                 </AnimatePresence>
+
+                {/* Stale: the figures above are real, they are just not
+                    current. Still a dot and not a banner — but an accent dot
+                    at a size that exists, next to words at the same scale as
+                    the rest of the column, and it says how old the numbers
+                    are. The old indicator was a 10px hairline-grey dot in a
+                    corner, which at two metres is indistinguishable from a
+                    dashboard that is simply working. */}
+                <AnimatePresence initial={false}>
+                  {stale && (
+                    <motion.p
+                      initial={reduceMotion ? false : { opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{
+                        opacity: 0,
+                        transition: { duration: reduceMotion ? 0 : DUR.ambient },
+                      }}
+                      transition={
+                        reduceMotion
+                          ? { duration: 0 }
+                          : { duration: DUR.ambient, ease: EASE.inOut }
+                      }
+                      className="flex items-center gap-h3 text-h6 font-medium text-hearth-ink-2"
+                      role="status"
+                    >
+                      <span
+                        aria-hidden
+                        className="inline-block size-[14px] shrink-0 rounded-h-pill bg-hearth-accent"
+                      />
+                      <span>
+                        {health === "rejected"
+                          ? "Needs re-pairing"
+                          : "Can't reach the hub"}
+                        {lastGoodAt
+                          ? ` · last updated ${hhmm(lastGoodAt)}`
+                          : ""}
+                      </span>
+                    </motion.p>
+                  )}
+                </AnimatePresence>
               </div>
             )}
           </div>
         )}
       </div>
-
-      {/* Offline: a dot, not a banner. The stale data on screen is still the
-          most useful thing to show. */}
-      <AnimatePresence>
-        {offline && (
-          <motion.span
-            initial={reduceMotion ? false : { opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{
-              opacity: 0,
-              transition: { duration: reduceMotion ? 0 : DUR.ambient },
-            }}
-            transition={
-              reduceMotion
-                ? { duration: 0 }
-                : { duration: DUR.ambient, ease: EASE.inOut }
-            }
-            className="absolute bottom-h5 right-h5 size-[10px] rounded-h-pill bg-hearth-line-strong"
-            role="status"
-            aria-label="Offline — showing last update"
-            title="Offline — showing last update"
-          />
-        )}
-      </AnimatePresence>
     </div>
   );
 }
