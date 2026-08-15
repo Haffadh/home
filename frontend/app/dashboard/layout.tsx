@@ -24,6 +24,12 @@ export const metadata: Metadata = {
        stay unmistakable. */
     statusBarStyle: "default",
   },
+  /* Next emits the standard `mobile-web-app-capable` for appleWebApp.capable
+     and no longer emits the Apple-prefixed one. iOS has honoured the prefixed
+     tag since long before the standard existed, and older iPads honour only
+     that — which is exactly the hardware a wall tablet tends to be. Both are
+     harmless together; missing the prefixed one costs fullscreen. */
+  other: { "apple-mobile-web-app-capable": "yes" },
   icons: {
     apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180" }],
     icon: [
