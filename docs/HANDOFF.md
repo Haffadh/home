@@ -14,7 +14,8 @@ verification audit. Written 2026-08-15.
 
 A single Next.js 16 app (`frontend/`, App Router, React 19, Tailwind 4,
 Framer Motion 12) backed by Supabase Postgres. No separate backend — the API
-is Next.js route handlers. **Live at https://home-psi-pink.vercel.app** —
+is Next.js route handlers. **Live at https://home.haffadh.org** (the same
+deployment also answers on https://home-psi-pink.vercel.app) —
 Vercel project `home`, personal scope `nawaf-haffadhs-projects`, auto-deployed
 from `main` on `github.com/Haffadh/home`.
 
@@ -97,7 +98,7 @@ service "Supabase CLI" (base64 after a `go-keyring-base64:` prefix), and
 
 ## 5. Pairing the wall iPad
 
-Open `https://home-psi-pink.vercel.app/dashboard?token=<DASHBOARD_TOKEN>`
+Open `https://home.haffadh.org/dashboard?token=<DASHBOARD_TOKEN>`
 **once** on the iPad; the token is
 then stored locally and the bare `/dashboard` URL works. The summary endpoint
 accepts only the `X-Dashboard-Token` header (timing-safe compare) and rejects
@@ -233,7 +234,9 @@ then.
 
 ## 9. Deployment
 
-**Live: https://home-psi-pink.vercel.app** (Vercel project `home`). Pushing to
+**Live: https://home.haffadh.org** — the canonical URL, a custom domain on the
+same Vercel project `home`, which also answers on its
+`home-psi-pink.vercel.app` alias. Pushing to
 `main` auto-deploys. Verified end-to-end against production 2026-08-15: all
 seven accounts log in and reach the right panel, Abdullah's tasks load, the
 wall dashboard summary returns data, and all three auth bypasses are closed.
