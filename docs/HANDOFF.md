@@ -112,8 +112,11 @@ prefix.
 - `auth/{login,logout,me,refresh,register}` — `register` is admin-only;
   `role-login` was deleted 2026-08-15 (it was an auth bypass, see §9a)
 - `daily-tasks`, `daily-tasks/[id]`, `daily-tasks/[id]/{complete,skip}` —
-  `GET` needs `?staff_user_id=<int>` or it 400s (by design)
-- `meals`, `meals/[id]`
+  `staff_user_id` is an optional override on both GET and POST. Omit it and
+  the server resolves the staff user by role (`lib/server/services/staffUser.ts`).
+  No surface passes it; see §7a.
+- `meals`, `meals/[id]` — `POST` is family + admin. Staff may read the menu
+  but not set it.
 - `requests` (POST), `requests/mine` (GET, scoped to the caller),
   `requests/[id]/done` (PATCH, abdullah/admin only) — all `{ok, data}`
 - `urgent_tasks` + `[id]` + `[id]/ack` — legacy; GET/PATCH/DELETE/ack now
@@ -152,6 +155,23 @@ hidden, because Chrome halts rAF for occluded pages and a Framer exit started
 then freezes mid-flight and stacks ghosts. Do **not** use Framer's own
 `useReducedMotion`. All mutating handlers use synchronous ref-based re-entry
 guards; state-driven `disabled` leaves a same-frame double-fire window.
+
+## 7a. One staff user, resolved on the server
+
+There is exactly one member of household staff, and all four surfaces must
+agree on who that is. `lib/server/services/staffUser.ts` resolves it **by
+role**, and `GET`/`POST /daily-tasks` and the dashboard summary all use it.
+
+This is not incidental — it was the root cause of the 2026-08-15 "the surfaces
+aren't sharing data" report. The staff panel used to query with the SIGNED-IN
+user's id from localStorage, so opening it as anyone but Abdullah showed "No
+tasks today" while his tasks sat under his id, and the admin panel had to
+fetch `/users` purely to learn that id, which left its "Add task" button a
+silent no-op for the ~5s that took. Nothing was ever out of sync; three
+different ideas of "whose tasks" just looked that way.
+
+**Do not reintroduce a client-supplied staff id.** If a second staff member is
+ever added, extend the resolver, not the callers.
 
 ## 8. Verification — 2026-08-15 audit
 
@@ -280,6 +300,14 @@ flow — store the `refreshToken` that `/auth/login` returns and call it.
   batching if it ever became user-facing.
 - **Admin's task list shows a plain "Loading…"** where the other surfaces use
   a skeleton that crossfades into content. Cosmetic inconsistency only.
+- **There is still no navigation between panels.** Each surface is a bare URL;
+  moving between them means signing out and back in. The menu editor now lives
+  on the family panel as well as admin, which removes the one case where this
+  actually blocked people, but an admin still cannot reach `/panel/admin` from
+  `/panel/family` without re-authenticating.
+- **`/panel/abdullah` has no role guard.** Anyone signed in can open it. It now
+  shows the staff tasks rather than an empty list, which is the safer failure,
+  but it is not access-controlled.
 - **The done-task exit runs at 500ms (`ambient`)**, not the 300ms `base` used
   for other transitions. It reads as "set down, not deleted", so it was left
   alone — but it is a deliberate deviation from the token vocabulary.
