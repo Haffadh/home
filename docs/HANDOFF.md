@@ -119,8 +119,12 @@ fullscreen dashboard with no URL bar. Two things worth knowing:
   URL, so `start_url` is a bare `/dashboard`. Pairing stays a one-time action
   performed on the device;
 - iOS *may* treat the Home Screen app as a separate storage context from
-  Safari. If the standalone app opens on "This screen needs pairing", open the
-  `?token=` URL once **inside the standalone app** rather than in Safari.
+  Safari, and which it does cannot be tested off-device. Launching the
+  installed app answers it: if the dashboard appears, storage is shared and
+  there is nothing to do. If it opens on "This screen needs pairing", storage
+  is partitioned — and because a standalone app has **no address bar**, there
+  is then no way to pair it at all from inside. That outcome promotes the
+  HttpOnly-cookie pairing in §10 from optional cleanup to the required fix.
 
 ## 5a. Dashboard failure states
 

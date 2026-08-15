@@ -36,6 +36,9 @@ const TOKEN_KEY = "shh_dashboard_token";
    wall screen admitting it has nothing. */
 const CACHE_KEY = "shh_dashboard_last";
 const REFRESH_MS = 60_000;
+/* Comfortably inside the refresh cycle, so a stalled attempt is always
+   resolved one way or the other before the next one starts. */
+const REQUEST_TIMEOUT_MS = 15_000;
 
 type Cached = { data: Summary; at: number; day: string };
 
@@ -189,10 +192,22 @@ export default function DashboardPage() {
 
   const load = useCallback(async () => {
     if (!token) return;
+
+    /* A request that never answers is not an error, and without this it would
+       leave `health` at "first-load" for ever — the skeleton back on screen
+       indefinitely, which is the exact failure this whole change exists to
+       remove. Captive portals, black-holed packets and stalled TLS handshakes
+       all hang rather than fail. Aborting turns a hang into words on the wall.
+       AbortController + setTimeout rather than AbortSignal.timeout, because
+       the tablet's iOS version is not known. */
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
     try {
       const res = await fetch("/dashboard/summary", {
         headers: { "X-Dashboard-Token": token },
         cache: "no-store",
+        signal: controller.signal,
       });
 
       /* The hub answered, and said no. Retrying cannot fix this — the token in
@@ -227,6 +242,8 @@ export default function DashboardPage() {
     } catch {
       setHealth("unreachable");
       setFailures((f) => f + 1);
+    } finally {
+      clearTimeout(timeout);
     }
   }, [token]);
 
